@@ -5,6 +5,7 @@ add_executable(
     unit/cli/cli_app_test.cpp
     unit/domain/observation_test.cpp
     unit/domain/result_test.cpp
+    unit/procfs/procfs_reader_test.cpp
     unit/smoke_test.cpp
 )
 target_link_libraries(
@@ -12,6 +13,7 @@ target_link_libraries(
     PRIVATE
         lx::core
         lx::cli
+        lx::linux
         lx_warnings
         Catch2::Catch2WithMain
 )

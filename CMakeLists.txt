@@ -51,6 +51,11 @@ configure_file(
 add_library(lx_warnings INTERFACE)
 lx_set_project_warnings(lx_warnings)
 
+add_library(lx_linux STATIC src/linux/procfs/ProcFsReader.cpp)
+add_library(lx::linux ALIAS lx_linux)
+target_link_libraries(lx_linux PUBLIC lx::core PRIVATE lx_warnings)
+lx_enable_sanitizers(lx_linux)
+
 add_library(
     lx_application STATIC
     src/application/DoctorService.cpp
@@ -77,7 +82,7 @@ target_link_libraries(
 lx_enable_sanitizers(lx_cli)
 
 add_executable(lx src/main.cpp)
-target_link_libraries(lx PRIVATE lx::cli lx_warnings)
+target_link_libraries(lx PRIVATE lx::cli lx::linux lx_warnings)
 lx_enable_sanitizers(lx)
 
 if(LX_ENABLE_LTO)
