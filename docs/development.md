@@ -53,3 +53,27 @@ Each commit must contain one logical change, use Conventional Commits, pass the
 tests available at that point, and leave unrelated local files untouched.
 Feature implementation proceeds in the order defined by the design
 specification; Phase 1 starts with the ProcFS reader and parsers.
+
+## Phase 1 process support
+
+The process path follows the project boundaries:
+
+```text
+CLI -> ProcessService -> IProcessProvider -> ProcFsProcessProvider
+```
+
+`ProcFsReader` accepts an alternate root so parser and provider tests use
+isolated fixtures. The production provider reads `stat`, `status`, `cmdline`,
+`exe`, and `cwd` directly from procfs. Missing core records fail the request;
+optional metadata failures produce structured warnings and a partial result.
+
+Inspect a process with:
+
+```bash
+./build/debug/lx process 1
+./build/debug/lx process $$ --raw-command
+```
+
+The default output performs best-effort command-line secret redaction. LX does
+not read process environments. Phase 1 deliberately excludes process listing,
+filtering, signaling, service mapping, sockets, and JSON output.

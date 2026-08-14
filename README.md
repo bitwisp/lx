@@ -22,6 +22,19 @@ ctest --preset debug
 Additional presets are available for `release`, `asan`, and `ubsan` builds.
 See [`docs/development.md`](docs/development.md) for the complete workflow.
 
+## Process inspection
+
+Phase 1 provides single-process inspection through procfs:
+
+```bash
+./build/debug/lx process $$
+./build/debug/lx doctor
+```
+
+Command arguments matching common secret option names are redacted by default.
+Use `--raw-command` only when the unmodified process command is explicitly
+required. Process listing and process actions are not implemented yet.
+
 ## Design specification
 
 [`LX_CPP17_Linux_Resource_Manager_Design.md`](LX_CPP17_Linux_Resource_Manager_Design.md)
