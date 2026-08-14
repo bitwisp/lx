@@ -68,4 +68,6 @@ TEST_CASE("ProcFsReader maps a disappeared process to not found")
     REQUIRE_FALSE(result);
     REQUIRE(result.error().code == lx::ErrorCode::NotFound);
     REQUIRE(result.error().systemError != 0);
+    REQUIRE(result.error().message.find("Unable to read status") !=
+            std::string::npos);
 }

@@ -17,8 +17,10 @@ Error makeError(const int number, const std::string& operation)
     } else if (number == EACCES || number == EPERM) {
         code = ErrorCode::PermissionDenied;
     }
-    return {code, std::system_category().message(number), number, "procfs",
-            operation};
+    return {code,
+            "Unable to " + operation + ": " +
+                std::system_category().message(number),
+            number, "procfs", operation};
 }
 
 } // namespace
@@ -66,4 +68,3 @@ std::filesystem::path ProcFsReader::pathFor(
 }
 
 } // namespace lx::linux::procfs
-
