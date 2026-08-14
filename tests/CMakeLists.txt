@@ -7,6 +7,7 @@ add_executable(
     unit/domain/result_test.cpp
     unit/procfs/cmdline_parser_test.cpp
     unit/procfs/passwd_user_resolver_test.cpp
+    unit/procfs/process_provider_test.cpp
     unit/procfs/procfs_reader_test.cpp
     unit/procfs/stat_parser_test.cpp
     unit/procfs/status_parser_test.cpp
