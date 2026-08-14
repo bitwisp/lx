@@ -9,7 +9,7 @@ int main(const int argc, char** argv)
 {
     const lx::linux::procfs::ProcFsProcessProvider processProvider;
     const lx::application::ProcessService processService{processProvider};
-    const lx::application::DoctorService doctorService;
+    const lx::application::DoctorService doctorService{processProvider};
     return lx::cli::CliApp{doctorService, processService}.run(
         argc, argv, std::cout, std::cerr);
 }

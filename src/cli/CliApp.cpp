@@ -22,6 +22,8 @@ std::string_view statusText(const CapabilityStatus status)
     switch (status) {
     case CapabilityStatus::Available:
         return "OK";
+    case CapabilityStatus::Unavailable:
+        return "unavailable";
     case CapabilityStatus::NotImplemented:
         return "not implemented";
     }

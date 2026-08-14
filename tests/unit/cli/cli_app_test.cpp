@@ -42,8 +42,8 @@ CliResult runCli(std::vector<std::string> arguments)
 
     std::ostringstream output;
     std::ostringstream error;
-    const lx::application::DoctorService doctorService;
     const FakeProcessProvider provider;
+    const lx::application::DoctorService doctorService{provider};
     const lx::application::ProcessService processService{provider};
     const auto exitCode = lx::cli::CliApp{doctorService, processService}.run(
         static_cast<int>(argv.size()), argv.data(), output, error);
@@ -111,7 +111,7 @@ TEST_CASE("CLI doctor clearly distinguishes pending capabilities")
 
     REQUIRE(result.exitCode == 0);
     REQUIRE(result.output.find("Project foundation   OK") != std::string::npos);
-    REQUIRE(result.output.find("Process API          not implemented") !=
+    REQUIRE(result.output.find("Process API          OK") !=
             std::string::npos);
     const auto systemdPosition = result.output.find("systemd");
     REQUIRE(systemdPosition != std::string::npos);

@@ -7,6 +7,7 @@ namespace lx {
 
 enum class CapabilityStatus {
     Available,
+    Unavailable,
     NotImplemented,
 };
 
@@ -21,4 +22,3 @@ struct DoctorReport {
 };
 
 } // namespace lx
-
