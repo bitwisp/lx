@@ -54,6 +54,7 @@ lx_set_project_warnings(lx_warnings)
 add_library(lx_linux STATIC
     src/linux/procfs/ProcFsReader.cpp
     src/linux/procfs/StatParser.cpp
+    src/linux/procfs/StatusParser.cpp
 )
 add_library(lx::linux ALIAS lx_linux)
 target_link_libraries(lx_linux PUBLIC lx::core PRIVATE lx_warnings)
