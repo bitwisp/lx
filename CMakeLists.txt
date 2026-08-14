@@ -90,4 +90,11 @@ if(LX_BUILD_TESTS)
     enable_testing()
     lx_add_test_dependencies()
     add_subdirectory(tests)
+    add_test(
+        NAME no_shell_gate
+        COMMAND
+            "${CMAKE_COMMAND}"
+            -DLX_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/NoShellGate.cmake"
+    )
 endif()
