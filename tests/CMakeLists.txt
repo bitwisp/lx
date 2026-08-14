@@ -1,4 +1,8 @@
-add_executable(lx_unit_tests unit/smoke_test.cpp)
+add_executable(
+    lx_unit_tests
+    unit/domain/result_test.cpp
+    unit/smoke_test.cpp
+)
 target_link_libraries(
     lx_unit_tests
     PRIVATE
@@ -10,4 +14,3 @@ lx_enable_sanitizers(lx_unit_tests)
 
 include(Catch)
 catch_discover_tests(lx_unit_tests)
-
