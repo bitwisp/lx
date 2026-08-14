@@ -24,7 +24,12 @@ include(CompilerWarnings)
 include(Sanitizers)
 include(Dependencies)
 
-set(LX_VERSION "${PROJECT_VERSION}-dev" CACHE STRING "LX display version")
+set(
+    LX_DISPLAY_VERSION
+    "${PROJECT_VERSION}-dev"
+    CACHE STRING
+    "LX display version"
+)
 lx_add_runtime_dependencies()
 
 add_library(lx_core INTERFACE)
@@ -46,6 +51,11 @@ configure_file(
 add_library(lx_warnings INTERFACE)
 lx_set_project_warnings(lx_warnings)
 
+add_library(lx_application STATIC src/application/DoctorService.cpp)
+add_library(lx::application ALIAS lx_application)
+target_link_libraries(lx_application PUBLIC lx::core PRIVATE lx_warnings)
+lx_enable_sanitizers(lx_application)
+
 add_library(lx_cli STATIC src/cli/CliApp.cpp)
 add_library(lx::cli ALIAS lx_cli)
 target_include_directories(
@@ -57,7 +67,7 @@ target_include_directories(
 )
 target_link_libraries(
     lx_cli
-    PUBLIC lx::core
+    PUBLIC lx::application lx::core
     PRIVATE lx_warnings CLI11::CLI11 fmt::fmt
 )
 lx_enable_sanitizers(lx_cli)

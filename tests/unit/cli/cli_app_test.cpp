@@ -1,4 +1,5 @@
 #include "lx/cli/CliApp.h"
+#include "lx/application/DoctorService.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -25,7 +26,8 @@ CliResult runCli(std::vector<std::string> arguments)
 
     std::ostringstream output;
     std::ostringstream error;
-    const auto exitCode = lx::cli::CliApp{}.run(
+    const lx::application::DoctorService doctorService;
+    const auto exitCode = lx::cli::CliApp{doctorService}.run(
         static_cast<int>(argv.size()), argv.data(), output, error);
     return {exitCode, output.str(), error.str()};
 }
@@ -60,3 +62,17 @@ TEST_CASE("CLI maps invalid arguments to the public exit code")
     REQUIRE_FALSE(result.error.empty());
 }
 
+TEST_CASE("CLI doctor clearly distinguishes pending capabilities")
+{
+    const auto result = runCli({"lx", "doctor"});
+
+    REQUIRE(result.exitCode == 0);
+    REQUIRE(result.output.find("Project foundation   OK") != std::string::npos);
+    REQUIRE(result.output.find("Process API          not implemented") !=
+            std::string::npos);
+    const auto systemdPosition = result.output.find("systemd");
+    REQUIRE(systemdPosition != std::string::npos);
+    REQUIRE(result.output.substr(systemdPosition, 64).find("not implemented") !=
+            std::string::npos);
+    REQUIRE(result.error.empty());
+}

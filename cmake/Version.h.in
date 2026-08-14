@@ -4,7 +4,6 @@
 
 namespace lx {
 
-inline constexpr std::string_view version = "@LX_VERSION@";
+inline constexpr std::string_view version = "@LX_DISPLAY_VERSION@";
 
 } // namespace lx
-
