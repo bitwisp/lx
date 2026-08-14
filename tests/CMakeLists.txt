@@ -2,6 +2,7 @@ add_executable(
     lx_unit_tests
     unit/application/doctor_service_test.cpp
     unit/cli/cli_app_test.cpp
+    unit/domain/observation_test.cpp
     unit/domain/result_test.cpp
     unit/smoke_test.cpp
 )
