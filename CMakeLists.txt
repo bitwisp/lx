@@ -51,7 +51,11 @@ configure_file(
 add_library(lx_warnings INTERFACE)
 lx_set_project_warnings(lx_warnings)
 
-add_library(lx_application STATIC src/application/DoctorService.cpp)
+add_library(
+    lx_application STATIC
+    src/application/DoctorService.cpp
+    src/application/ProcessService.cpp
+)
 add_library(lx::application ALIAS lx_application)
 target_link_libraries(lx_application PUBLIC lx::core PRIVATE lx_warnings)
 lx_enable_sanitizers(lx_application)
