@@ -1,5 +1,6 @@
 #include "lx/cli/CliApp.h"
 #include "lx/application/DoctorService.h"
+#include "lx/application/ProcessService.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -9,6 +10,21 @@
 #include <vector>
 
 namespace {
+
+class FakeProcessProvider final : public lx::contracts::IProcessProvider {
+public:
+    lx::Result<lx::Observation<lx::ProcessInfo>> get(const pid_t pid) const override
+    {
+        if (pid == 404) return lx::Result<lx::Observation<lx::ProcessInfo>>::failure(
+            {lx::ErrorCode::NotFound, "Process not found", 2, "fake", "get"});
+        lx::ProcessInfo info;
+        info.pid = pid; info.ppid = 1; info.name = "demo"; info.state = "sleeping";
+        info.uid = 1000; info.user = "tester"; info.threads = 2;
+        info.rssBytes = 2 * 1024 * 1024;
+        info.argv = {"demo", "--token", "secret", "--port=80"};
+        return lx::Result<lx::Observation<lx::ProcessInfo>>::success({std::move(info), {}});
+    }
+};
 
 struct CliResult {
     int exitCode;
@@ -27,9 +43,36 @@ CliResult runCli(std::vector<std::string> arguments)
     std::ostringstream output;
     std::ostringstream error;
     const lx::application::DoctorService doctorService;
-    const auto exitCode = lx::cli::CliApp{doctorService}.run(
+    const FakeProcessProvider provider;
+    const lx::application::ProcessService processService{provider};
+    const auto exitCode = lx::cli::CliApp{doctorService, processService}.run(
         static_cast<int>(argv.size()), argv.data(), output, error);
     return {exitCode, output.str(), error.str()};
+}
+
+TEST_CASE("CLI prints process details with secrets redacted")
+{
+    const auto result = runCli({"lx", "process", "42"});
+    REQUIRE(result.exitCode == 0);
+    REQUIRE(result.output.find("Process 42") != std::string::npos);
+    REQUIRE(result.output.find("--token <redacted>") != std::string::npos);
+    REQUIRE(result.output.find("secret") == std::string::npos);
+}
+
+TEST_CASE("CLI raw process command is explicit")
+{
+    const auto result = runCli({"lx", "process", "42", "--raw-command"});
+    REQUIRE(result.exitCode == 0);
+    REQUIRE(result.output.find("--token secret") != std::string::npos);
+}
+
+TEST_CASE("CLI validates process PID and maps not found")
+{
+    REQUIRE(runCli({"lx", "process", "0"}).exitCode == 2);
+    const auto missing = runCli({"lx", "process", "404"});
+    REQUIRE(missing.exitCode == 3);
+    REQUIRE(missing.output.empty());
+    REQUIRE(missing.error.find("Process not found") != std::string::npos);
 }
 
 } // namespace
