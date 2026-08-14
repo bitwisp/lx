@@ -24,6 +24,9 @@ include(CompilerWarnings)
 include(Sanitizers)
 include(Dependencies)
 
+set(LX_VERSION "${PROJECT_VERSION}-dev" CACHE STRING "LX display version")
+lx_add_runtime_dependencies()
+
 add_library(lx_core INTERFACE)
 add_library(lx::core ALIAS lx_core)
 target_include_directories(
@@ -34,11 +37,33 @@ target_include_directories(
 )
 target_compile_features(lx_core INTERFACE cxx_std_17)
 
+configure_file(
+    cmake/Version.h.in
+    "${CMAKE_CURRENT_BINARY_DIR}/generated/lx/Version.h"
+    @ONLY
+)
+
 add_library(lx_warnings INTERFACE)
 lx_set_project_warnings(lx_warnings)
 
+add_library(lx_cli STATIC src/cli/CliApp.cpp)
+add_library(lx::cli ALIAS lx_cli)
+target_include_directories(
+    lx_cli
+    PUBLIC
+        "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
+    PRIVATE
+        "${CMAKE_CURRENT_BINARY_DIR}/generated"
+)
+target_link_libraries(
+    lx_cli
+    PUBLIC lx::core
+    PRIVATE lx_warnings CLI11::CLI11 fmt::fmt
+)
+lx_enable_sanitizers(lx_cli)
+
 add_executable(lx src/main.cpp)
-target_link_libraries(lx PRIVATE lx::core lx_warnings)
+target_link_libraries(lx PRIVATE lx::cli lx_warnings)
 lx_enable_sanitizers(lx)
 
 if(LX_ENABLE_LTO)

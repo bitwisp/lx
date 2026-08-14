@@ -1,0 +1,10 @@
+#pragma once
+
+#include <string_view>
+
+namespace lx {
+
+inline constexpr std::string_view version = "@LX_VERSION@";
+
+} // namespace lx
+

@@ -1,5 +1,6 @@
 add_executable(
     lx_unit_tests
+    unit/cli/cli_app_test.cpp
     unit/domain/result_test.cpp
     unit/smoke_test.cpp
 )
@@ -7,6 +8,7 @@ target_link_libraries(
     lx_unit_tests
     PRIVATE
         lx::core
+        lx::cli
         lx_warnings
         Catch2::Catch2WithMain
 )
