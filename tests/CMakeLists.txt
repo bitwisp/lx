@@ -16,4 +16,17 @@ target_link_libraries(
 lx_enable_sanitizers(lx_unit_tests)
 
 include(Catch)
-catch_discover_tests(lx_unit_tests)
+if(LX_ENABLE_ASAN)
+    set(lx_asan_test_environment "ASAN_OPTIONS=detect_leaks=0")
+    set_property(
+        TARGET lx_unit_tests
+        PROPERTY CROSSCOMPILING_EMULATOR
+            "${CMAKE_COMMAND};-E;env;${lx_asan_test_environment}"
+    )
+    catch_discover_tests(
+        lx_unit_tests
+        PROPERTIES ENVIRONMENT "${lx_asan_test_environment}"
+    )
+else()
+    catch_discover_tests(lx_unit_tests)
+endif()
