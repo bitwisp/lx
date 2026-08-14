@@ -52,6 +52,7 @@ add_library(lx_warnings INTERFACE)
 lx_set_project_warnings(lx_warnings)
 
 add_library(lx_linux STATIC
+    src/linux/procfs/CmdlineParser.cpp
     src/linux/procfs/ProcFsReader.cpp
     src/linux/procfs/StatParser.cpp
     src/linux/procfs/StatusParser.cpp
