@@ -247,6 +247,14 @@ if(LX_BUILD_TESTS)
             -DLX_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
             -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/NoShellGate.cmake"
     )
+    add_test(
+        NAME install_layout
+        COMMAND
+            "${CMAKE_COMMAND}"
+            -DLX_BINARY_DIR=${CMAKE_BINARY_DIR}
+            -DLX_EXPECTED_VERSION=${LX_DISPLAY_VERSION}
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/InstallLayoutTest.cmake"
+    )
 endif()
 
 set(CPACK_GENERATOR "DEB")
