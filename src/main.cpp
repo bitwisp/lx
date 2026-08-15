@@ -20,7 +20,8 @@ int main(const int argc, char** argv)
     const lx::linux::procfs::SocketInodeResolver socketOwnerResolver;
     const lx::application::PortService portService{
         socketProvider, socketOwnerResolver, processService};
-    const lx::application::DoctorService doctorService{processProvider, socketProvider};
+    const lx::application::DoctorService doctorService{
+        processProvider, socketProvider, signalProvider};
     return lx::cli::CliApp{doctorService, processService, portService}.run(
         argc, argv, std::cin, std::cout, std::cerr);
 }

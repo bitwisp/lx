@@ -4,8 +4,12 @@
 
 namespace lx::application {
 
-DoctorService::DoctorService(const contracts::IProcessProvider& processProvider, const contracts::ISocketProvider& socketProvider) noexcept
-    : processProvider_(processProvider), socketProvider_(socketProvider)
+DoctorService::DoctorService(
+    const contracts::IProcessProvider& processProvider,
+    const contracts::ISocketProvider& socketProvider,
+    const contracts::ISignalProvider& signalProvider) noexcept
+    : processProvider_(processProvider), socketProvider_(socketProvider),
+      signalProvider_(signalProvider)
 {
 }
 
@@ -16,6 +20,7 @@ DoctorReport DoctorService::inspect() const
          "C++17 application and test infrastructure are ready"},
         {"Process API", CapabilityStatus::Unavailable, "not checked"},
         {"Socket API", CapabilityStatus::Unavailable, "not checked"},
+        {"Process signals", CapabilityStatus::Unavailable, "not checked"},
         {"systemd", CapabilityStatus::NotImplemented,
          "systemd provider is planned for Phase 5"},
         {"Journal", CapabilityStatus::NotImplemented,
@@ -32,6 +37,16 @@ DoctorReport DoctorService::inspect() const
     SocketQuery socketQuery; socketQuery.protocol=TransportProtocol::Tcp;
     const auto sockets=socketProvider_.query(socketQuery); auto& socketCheck=report.checks[2];
     if(sockets){socketCheck.status=CapabilityStatus::Available;socketCheck.detail="INET_DIAG socket inspection is available";}else socketCheck.detail=sockets.error().message;
+    const auto signalCapabilities = signalProvider_.capabilities();
+    auto& signalCheck = report.checks[3];
+    if (signalCapabilities.signalingAvailable) {
+        signalCheck.status = CapabilityStatus::Available;
+        signalCheck.detail = signalCapabilities.pidFdAvailable
+                                 ? "Process signaling uses pidfd when possible"
+                                 : "Process signaling uses kill(2) fallback";
+    } else {
+        signalCheck.detail = "Process signaling is unavailable";
+    }
     return report;
 }
 

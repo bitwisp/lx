@@ -103,7 +103,8 @@ CliResult runCli(std::vector<std::string> arguments,
         provider, signalProvider, 999};
     const FakeSocketProvider socketProvider{releaseStage};
     const FakeSocketOwnerResolver socketOwnerResolver;
-    const lx::application::DoctorService doctorService{provider, socketProvider};
+    const lx::application::DoctorService doctorService{
+        provider, socketProvider, signalProvider};
     const lx::application::PortService portService{
         socketProvider, socketOwnerResolver, processService};
     const auto exitCode = lx::cli::CliApp{doctorService, processService, portService}.run(
