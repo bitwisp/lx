@@ -41,7 +41,8 @@ int main(const int argc, char** argv)
     const lx::application::PortService portService{
         socketProvider, socketOwnerResolver, processService, &serviceService};
     const lx::application::DoctorService doctorService{
-        processProvider, socketProvider, signalProvider, serviceProvider};
+        processProvider, socketProvider, signalProvider, serviceProvider,
+        journalProvider};
     return lx::cli::CliApp{doctorService, processService, portService,
                            serviceService, logService}.run(
         argc, argv, std::cin, std::cout, std::cerr);

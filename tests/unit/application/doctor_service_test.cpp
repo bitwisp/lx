@@ -68,6 +68,30 @@ public:
 
     bool available = true;
 };
+class DoctorJournalProvider final : public lx::contracts::IJournalProvider {
+public:
+    lx::Result<void> probe() const override
+    {
+        if (available) return lx::Result<void>::success();
+        return lx::Result<void>::failure(
+            {lx::ErrorCode::PermissionDenied, "journal permission denied", 0,
+             "fake-journal", "probe"});
+    }
+    lx::Result<lx::Observation<std::vector<lx::JournalEntry>>> query(
+        const lx::LogQuery&) const override
+    {
+        return lx::Result<lx::Observation<std::vector<lx::JournalEntry>>>::success(
+            {{}, {}});
+    }
+    lx::Result<void> follow(
+        const lx::LogQuery&, const lx::contracts::JournalEntrySink&,
+        const lx::contracts::JournalStopRequested&) const override
+    {
+        return lx::Result<void>::success();
+    }
+
+    bool available = true;
+};
 
 } // namespace
 
@@ -77,8 +101,9 @@ TEST_CASE("DoctorService reports implemented capabilities as available")
     const DoctorSocketProvider sockets;
     const DoctorSignalProvider signals;
     const DoctorServiceProvider services;
+    const DoctorJournalProvider journal;
     const auto report = lx::application::DoctorService{
-        provider, sockets, signals, services}.inspect();
+        provider, sockets, signals, services, journal}.inspect();
 
     REQUIRE(report.checks.size() == 6);
     REQUIRE(report.checks.front().name == "Project foundation");
@@ -89,7 +114,7 @@ TEST_CASE("DoctorService reports implemented capabilities as available")
     REQUIRE(report.checks[3].status == lx::CapabilityStatus::Available);
     REQUIRE(report.checks[3].detail.find("pidfd") != std::string::npos);
     REQUIRE(report.checks[4].status == lx::CapabilityStatus::Available);
-    REQUIRE(report.checks[5].status == lx::CapabilityStatus::NotImplemented);
+    REQUIRE(report.checks[5].status == lx::CapabilityStatus::Available);
 }
 
 TEST_CASE("DoctorService reports an unavailable systemd manager")
@@ -99,10 +124,28 @@ TEST_CASE("DoctorService reports an unavailable systemd manager")
     const DoctorSignalProvider signals;
     DoctorServiceProvider services;
     services.available = false;
+    const DoctorJournalProvider journal;
 
     const auto report = lx::application::DoctorService{
-        processes, sockets, signals, services}.inspect();
+        processes, sockets, signals, services, journal}.inspect();
 
     REQUIRE(report.checks[4].status == lx::CapabilityStatus::Unavailable);
     REQUIRE(report.checks[4].detail == "systemd manager is not running");
+    REQUIRE(report.checks[5].status == lx::CapabilityStatus::Available);
+}
+
+TEST_CASE("DoctorService reports unavailable journal permissions")
+{
+    const DoctorProcessProvider processes;
+    const DoctorSocketProvider sockets;
+    const DoctorSignalProvider signals;
+    const DoctorServiceProvider services;
+    DoctorJournalProvider journal;
+    journal.available = false;
+
+    const auto report = lx::application::DoctorService{
+        processes, sockets, signals, services, journal}.inspect();
+
+    REQUIRE(report.checks[5].status == lx::CapabilityStatus::Unavailable);
+    REQUIRE(report.checks[5].detail == "journal permission denied");
 }

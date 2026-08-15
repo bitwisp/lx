@@ -8,9 +8,11 @@ DoctorService::DoctorService(
     const contracts::IProcessProvider& processProvider,
     const contracts::ISocketProvider& socketProvider,
     const contracts::ISignalProvider& signalProvider,
-    const contracts::IServiceProvider& serviceProvider) noexcept
+    const contracts::IServiceProvider& serviceProvider,
+    const contracts::IJournalProvider& journalProvider) noexcept
     : processProvider_(processProvider), socketProvider_(socketProvider),
-      signalProvider_(signalProvider), serviceProvider_(serviceProvider)
+      signalProvider_(signalProvider), serviceProvider_(serviceProvider),
+      journalProvider_(journalProvider)
 {
 }
 
@@ -23,8 +25,7 @@ DoctorReport DoctorService::inspect() const
         {"Socket API", CapabilityStatus::Unavailable, "not checked"},
         {"Process signals", CapabilityStatus::Unavailable, "not checked"},
         {"systemd", CapabilityStatus::Unavailable, "not checked"},
-        {"Journal", CapabilityStatus::NotImplemented,
-         "journal provider is planned for Phase 6"},
+        {"Journal", CapabilityStatus::Unavailable, "not checked"},
     }};
     const auto process = processProvider_.get(::getpid());
     auto& check = report.checks[1];
@@ -54,6 +55,14 @@ DoctorReport DoctorService::inspect() const
         systemdCheck.detail = "systemd service management is available";
     } else {
         systemdCheck.detail = systemd.error().message;
+    }
+    const auto journal = journalProvider_.probe();
+    auto& journalCheck = report.checks[5];
+    if (journal) {
+        journalCheck.status = CapabilityStatus::Available;
+        journalCheck.detail = "Local journal queries are available";
+    } else {
+        journalCheck.detail = journal.error().message;
     }
     return report;
 }

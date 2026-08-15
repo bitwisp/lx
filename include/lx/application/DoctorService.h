@@ -4,6 +4,7 @@
 #include "lx/contracts/ISignalProvider.h"
 #include "lx/contracts/ISocketProvider.h"
 #include "lx/contracts/IServiceProvider.h"
+#include "lx/contracts/IJournalProvider.h"
 #include "lx/domain/DoctorReport.h"
 
 namespace lx::application {
@@ -13,7 +14,8 @@ public:
     DoctorService(const contracts::IProcessProvider& processProvider,
                   const contracts::ISocketProvider& socketProvider,
                   const contracts::ISignalProvider& signalProvider,
-                  const contracts::IServiceProvider& serviceProvider) noexcept;
+                  const contracts::IServiceProvider& serviceProvider,
+                  const contracts::IJournalProvider& journalProvider) noexcept;
     [[nodiscard]] DoctorReport inspect() const;
 
 private:
@@ -21,6 +23,7 @@ private:
     const contracts::ISocketProvider& socketProvider_;
     const contracts::ISignalProvider& signalProvider_;
     const contracts::IServiceProvider& serviceProvider_;
+    const contracts::IJournalProvider& journalProvider_;
 };
 
 } // namespace lx::application
