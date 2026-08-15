@@ -238,3 +238,48 @@ missing or inaccessible.
 Phase 6 does not add global unfiltered logs, priority/boot filters, cursor
 resume, complex natural-language dates, JSON output, or recent logs in
 `inspect`; inspect integration begins in Phase 7.
+
+## Phase 7 unified inspection and search
+
+Process enumeration scans numeric procfs directories and treats processes that
+exit or become unreadable during the scan as partial-result warnings. Lists can
+be filtered with exact process names, user names or numeric UIDs, and normalized
+systemd service names:
+
+```bash
+./build/debug/lx process
+./build/debug/lx process --name nginx
+./build/debug/lx process --user 1000
+./build/debug/lx process --service nginx
+```
+
+`ResourceResolver` gives `inspect` predictable resource selection. Explicit
+targets use `port:`, `pid:`, or `service:`. A bare number is probed as both a
+port and PID and returns conflict exit code 7 when both exist. A bare name
+prefers an exact normalized service and otherwise requires a unique exact
+process name.
+
+```bash
+./build/debug/lx inspect port:8080
+./build/debug/lx inspect pid:1234
+./build/debug/lx inspect service:nginx
+./build/debug/lx inspect nginx
+```
+
+`InspectService` builds a bounded, in-memory resource graph linking listening
+ports, owning processes, services, and at most 20 recent journal entries.
+Failure of the requested root resource is fatal; unavailable related data is
+reported as a warning without hiding the root result.
+
+`find` performs case-insensitive substring searches across observable service
+units and descriptions, process names, users, arguments, executables, and port
+numbers. Related ports are included when their process or service matches:
+
+```bash
+./build/debug/lx find nginx
+./build/debug/lx find 8080
+```
+
+Phase 7 remains read-only except for the existing explicit process, port, and
+service actions. CPU sampling, JSON output, quiet/no-color automation options,
+and full-disk executable search remain outside this phase.

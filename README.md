@@ -1,12 +1,12 @@
 # LX — Linux Resource Manager
 
 LX is a resource-oriented Linux inspection and management tool written in
-C++17. It will provide a unified view of sockets, processes, systemd services,
+C++17. It provides a unified view of sockets, processes, systemd services,
 and journal entries through native Linux APIs, without shelling out to
 traditional system utilities.
 
-The project is being built incrementally. The current milestone is repository
-foundation work; resource providers are not implemented yet.
+The project is built incrementally and currently includes native procfs,
+INET_DIAG, pidfd, sd-bus, and sd-journal integrations.
 
 ## Build and test
 
@@ -24,16 +24,32 @@ See [`docs/development.md`](docs/development.md) for the complete workflow.
 
 ## Process inspection
 
-Phase 1 provides single-process inspection through procfs:
+Inspect or list processes through procfs:
 
 ```bash
 ./build/debug/lx process $$
+./build/debug/lx process
+./build/debug/lx process --name nginx
 ./build/debug/lx doctor
 ```
 
 Command arguments matching common secret option names are redacted by default.
 Use `--raw-command` only when the unmodified process command is explicitly
-required. Process listing and process actions are not implemented yet.
+required. Process lists also support `--user` and `--service` filters.
+
+## Unified resources
+
+Inspect and search related ports, processes, services, and recent logs:
+
+```bash
+./build/debug/lx inspect port:8080
+./build/debug/lx inspect pid:1234
+./build/debug/lx inspect nginx
+./build/debug/lx find nginx
+```
+
+Explicit prefixes avoid ambiguity. If a bare number exists as both a port and
+PID, LX returns a conflict and suggests the two explicit forms.
 
 ## Port inspection
 
