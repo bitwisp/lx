@@ -11,7 +11,6 @@ public:
                 const contracts::ISocketOwnerResolver& ownerResolver,
                 const contracts::IProcessProvider& processProvider) noexcept;
 
-    Result<Observation<std::vector<SocketInfo>>> query(const SocketQuery& query) const;
     Result<Observation<std::vector<PortInfo>>> inspect(
         const SocketQuery& query) const;
 

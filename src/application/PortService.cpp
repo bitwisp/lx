@@ -26,12 +26,6 @@ PortService::PortService(
 {
 }
 
-Result<Observation<std::vector<SocketInfo>>> PortService::query(
-    const SocketQuery& query) const
-{
-    return socketProvider_.query(query);
-}
-
 Result<Observation<std::vector<PortInfo>>> PortService::inspect(
     const SocketQuery& query) const
 {

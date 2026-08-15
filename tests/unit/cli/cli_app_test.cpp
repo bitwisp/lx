@@ -19,7 +19,7 @@ public:
         if (pid == 404) return lx::Result<lx::Observation<lx::ProcessInfo>>::failure(
             {lx::ErrorCode::NotFound, "Process not found", 2, "fake", "get"});
         lx::ProcessInfo info;
-        info.pid = pid; info.ppid = 1; info.name = "demo"; info.state = "sleeping";
+        info.pid = pid; info.ppid = 1; info.name = pid == 20 ? "worker" : "demo"; info.state = "sleeping";
         info.uid = 1000; info.user = "tester"; info.threads = 2;
         info.rssBytes = 2 * 1024 * 1024;
         info.argv = {"demo", "--token", "secret", "--port=80"};
@@ -32,6 +32,8 @@ public:
     lx::Result<lx::Observation<std::vector<lx::SocketInfo>>> query(const lx::SocketQuery& query) const override {
         std::vector<lx::SocketInfo> values;
         if (!query.localPort || *query.localPort == 8080) { lx::SocketInfo socket; socket.local={"127.0.0.1",8080};socket.state="listen";socket.uid=1000;socket.inode=42;values.push_back(socket); }
+        if (!query.localPort || *query.localPort == 9090) { lx::SocketInfo socket; socket.local={"0.0.0.0",9090};socket.state="listen";socket.uid=1000;socket.inode=99;values.push_back(socket); }
+        if (!query.localPort || *query.localPort == 9091) { lx::SocketInfo socket; socket.local={"0.0.0.0",9091};socket.state="listen";socket.uid=1000;socket.inode=100;values.push_back(socket); }
         return lx::Result<lx::Observation<std::vector<lx::SocketInfo>>>::success({std::move(values),{}});
     }
 };
@@ -43,7 +45,7 @@ public:
         const std::vector<std::uint64_t>&) const override
     {
         return lx::Result<lx::Observation<lx::SocketOwnership>>::success(
-            {{}, {}});
+            {{{42, {10, 20}}, {99, {404}}}, {}});
     }
 };
 
@@ -76,7 +78,8 @@ CliResult runCli(std::vector<std::string> arguments)
 }
 
 TEST_CASE("CLI lists and filters ports") {
-    const auto all=runCli({"lx","port"}); REQUIRE(all.exitCode==0); REQUIRE(all.output.find("127.0.0.1")!=std::string::npos); REQUIRE(all.output.find("unresolved")!=std::string::npos);
+    const auto all=runCli({"lx","port"}); REQUIRE(all.exitCode==0); REQUIRE(all.output.find("127.0.0.1")!=std::string::npos); REQUIRE(all.output.find("demo,worker")!=std::string::npos); REQUIRE(all.output.find("10,20")!=std::string::npos); REQUIRE(all.output.find("unresolved")!=std::string::npos);
+    const auto unavailable=runCli({"lx","port","9090"}); REQUIRE(unavailable.output.find("<unavailable>")!=std::string::npos); REQUIRE(unavailable.output.find("404")!=std::string::npos);
     REQUIRE(runCli({"lx","port","9999"}).exitCode==3);
 }
 

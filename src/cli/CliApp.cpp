@@ -89,6 +89,33 @@ std::string joinArguments(const std::vector<std::string>& arguments)
     return joined.str();
 }
 
+std::string ownerNames(const PortInfo& port)
+{
+    if (port.socket.ownerPids.empty()) return "unresolved";
+
+    std::ostringstream joined;
+    for (const auto pid : port.socket.ownerPids) {
+        const auto owner = std::find_if(
+            port.owners.begin(), port.owners.end(),
+            [pid](const ProcessInfo& process) { return process.pid == pid; });
+        if (joined.tellp() != 0) joined << ',';
+        joined << (owner == port.owners.end() ? "<unavailable>" : owner->name);
+    }
+    return joined.str();
+}
+
+std::string ownerPids(const PortInfo& port)
+{
+    if (port.socket.ownerPids.empty()) return "-";
+
+    std::ostringstream joined;
+    for (std::size_t index = 0; index < port.socket.ownerPids.size(); ++index) {
+        if (index != 0) joined << ',';
+        joined << port.socket.ownerPids[index];
+    }
+    return joined.str();
+}
+
 void printProcess(const Observation<ProcessInfo>& observed, const bool raw,
                   std::ostream& output)
 {
@@ -167,11 +194,19 @@ int CliApp::run(
         } else if (*port) {
             SocketQuery query;
             if (portOption->count() != 0) query.localPort = static_cast<std::uint16_t>(portNumber);
-            const auto result = portService_.query(query);
+            const auto result = portService_.inspect(query);
             if (!result) { error << result.error().message << '\n'; return exitCode(result.error().code); }
             if (result.value().value.empty() && query.localPort) { error << "No socket found for port " << portNumber << '\n'; return 3; }
-            output << "PROTO  ADDRESS                                  PORT   STATE        UID     INODE       PROCESS\n";
-            for (const auto& socket : result.value().value) output << fmt::format("{:<6} {:<40} {:<6} {:<12} {:<7} {:<11} unresolved\n", socket.protocol==TransportProtocol::Tcp?"TCP":"UDP",socket.local.address,socket.local.port,socket.state,socket.uid,socket.inode);
+            output << "PROTO  ADDRESS                                  PORT   STATE        UID     INODE       PROCESS                  PID\n";
+            for (const auto& portInfo : result.value().value) {
+                const auto& socket = portInfo.socket;
+                output << fmt::format(
+                    "{:<6} {:<40} {:<6} {:<12} {:<7} {:<11} {:<24} {}\n",
+                    socket.protocol == TransportProtocol::Tcp ? "TCP" : "UDP",
+                    socket.local.address, socket.local.port, socket.state,
+                    socket.uid, socket.inode, ownerNames(portInfo),
+                    ownerPids(portInfo));
+            }
             for (const auto& warning : result.value().warnings) error << "Warning: " << warning.message << '\n';
         }
         return 0;
