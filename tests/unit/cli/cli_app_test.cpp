@@ -609,12 +609,13 @@ TEST_CASE("CLI prints help to standard output")
     REQUIRE(result.error.empty());
 }
 
-TEST_CASE("CLI prints the development version")
+TEST_CASE("CLI prints the configured display version")
 {
     const auto result = runCli({"lx", "--version"});
 
     REQUIRE(result.exitCode == 0);
-    REQUIRE(result.output == "LX 0.1.0-dev\n");
+    REQUIRE(result.output ==
+            std::string{"LX "} + LX_TEST_DISPLAY_VERSION + '\n');
     REQUIRE(result.error.empty());
 }
 

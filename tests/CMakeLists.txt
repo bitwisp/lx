@@ -70,6 +70,10 @@ target_link_libraries(
         nlohmann_json::nlohmann_json
         Catch2::Catch2WithMain
 )
+target_compile_definitions(
+    lx_unit_tests
+    PRIVATE LX_TEST_DISPLAY_VERSION="${LX_DISPLAY_VERSION}"
+)
 lx_enable_sanitizers(lx_unit_tests)
 
 include(Catch)
