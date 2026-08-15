@@ -10,6 +10,7 @@
 #include "lx/domain/DoctorReport.h"
 #include "lx/domain/FindResult.h"
 #include "lx/domain/ResourceGraph.h"
+#include "lx/domain/SystemMetrics.h"
 
 #include <string>
 #include <vector>
@@ -45,6 +46,7 @@ public:
     [[nodiscard]] static std::string doctor(const DoctorReport& value);
     [[nodiscard]] static std::string inspect(const ResourceGraph& value);
     [[nodiscard]] static std::string find(const FindResult& value);
+    [[nodiscard]] static std::string status(const HostStatus& value);
 };
 
 } // namespace lx::cli

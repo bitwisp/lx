@@ -103,6 +103,8 @@ Json optionalString(const std::optional<std::string>& value)
 
 Json processValue(const ProcessInfo& process, const bool raw)
 {
+    const Json cpuPercent = process.cpuPercent ? Json(*process.cpuPercent)
+                                                : Json(nullptr);
     return {{"pid", process.pid},
             {"ppid", process.ppid},
             {"name", process.name},
@@ -115,6 +117,7 @@ Json processValue(const ProcessInfo& process, const bool raw)
             {"argv", arguments(process.argv, raw)},
             {"rss_bytes", process.rssBytes},
             {"threads", process.threads},
+            {"cpu_percent", cpuPercent},
             {"systemd_unit", optionalString(process.systemdUnit)}};
 }
 
@@ -349,6 +352,18 @@ std::string JsonSerializer::find(const FindResult& value)
               {"ports", portValues(value.ports)},
               {"executables", value.executables}};
     return envelope("find", "search", std::move(data), value.warnings).dump();
+}
+
+std::string JsonSerializer::status(const HostStatus& value)
+{
+    const Json cpuPercent = value.cpuPercent ? Json(*value.cpuPercent)
+                                             : Json(nullptr);
+    Json status{{"hostname", value.hostname},
+                {"cpu_percent", cpuPercent},
+                {"memory_total_bytes", value.memoryTotalBytes},
+                {"memory_used_bytes", value.memoryUsedBytes},
+                {"uptime_milliseconds", value.uptime.count()}};
+    return envelope("status", "read", {{"status", std::move(status)}}, {}).dump();
 }
 
 } // namespace lx::cli

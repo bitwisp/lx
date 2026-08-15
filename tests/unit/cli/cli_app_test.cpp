@@ -301,6 +301,15 @@ TEST_CASE("CLI shows host status")
     CHECK(result.output.find("Memory") != std::string::npos);
 }
 
+TEST_CASE("CLI serializes host status as JSON")
+{
+    const auto result = runCli({"lx", "status", "--json"});
+    REQUIRE(result.exitCode == 0);
+    const auto document = nlohmann::json::parse(result.output);
+    CHECK(document.at("command") == "status");
+    CHECK(document.at("data").at("status").at("hostname") == "test-host");
+}
+
 TEST_CASE("CLI lists and filters ports") {
     const auto all=runCli({"lx","port"}); REQUIRE(all.exitCode==0); REQUIRE(all.output.find("127.0.0.1")!=std::string::npos); REQUIRE(all.output.find("demo,worker")!=std::string::npos); REQUIRE(all.output.find("10,20")!=std::string::npos); REQUIRE(all.output.find("demo.service")!=std::string::npos); REQUIRE(all.output.find("unresolved")!=std::string::npos);
     const auto unavailable=runCli({"lx","port","9090"}); REQUIRE(unavailable.output.find("<unavailable>")!=std::string::npos); REQUIRE(unavailable.output.find("404")!=std::string::npos);

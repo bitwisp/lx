@@ -31,6 +31,7 @@ envelope with `command: "log"`, `operation: "follow"`, and `data.entry`.
 | Command | Operation | Data fields |
 |---|---|---|
 | doctor | inspect | `checks` |
+| status | read | `status` (`hostname`, `cpu_percent`, `memory_total_bytes`, `memory_used_bytes`, `uptime_milliseconds`) |
 | process | list | `processes` |
 | process | inspect | `process` |
 | port | list / inspect | `ports` |
@@ -44,6 +45,10 @@ Optional scalar values are `null`, collections are arrays, byte sizes and Unix
 microsecond timestamps are integers, and enum values are lowercase strings.
 Process arguments use the same best-effort secret redaction as human output;
 only `process PID --raw-command --json` disables it.
+
+Process objects include `cpu_percent`. It is `null` when no valid pair of CPU
+samples is available, and may exceed 100 when a process uses multiple logical
+CPUs.
 
 JSON is intentionally rejected for process signals, port release, and service
 lifecycle actions so that a machine-output flag can never imply authorization

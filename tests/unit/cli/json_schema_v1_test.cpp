@@ -46,9 +46,22 @@ TEST_CASE("JSON schema v1 locks process field names and primitive types")
     const auto& value = document.at("data").at("process");
     CHECK(keys(value) == std::set<std::string>{
                              "argv", "cwd", "executable", "gid", "name",
-                             "pid", "ppid", "rss_bytes", "state",
+                             "pid", "ppid", "rss_bytes", "state", "cpu_percent",
                              "systemd_unit", "threads", "uid", "user"});
     CHECK(value.at("pid").is_number_integer());
     CHECK(value.at("argv").is_array());
     CHECK(value.at("executable").is_null());
+}
+
+TEST_CASE("JSON schema v1 locks status field names")
+{
+    lx::HostStatus status;
+    status.hostname = "host";
+    const auto document = nlohmann::json::parse(
+        lx::cli::JsonSerializer::status(status));
+    const auto& value = document.at("data").at("status");
+    CHECK(keys(value) == std::set<std::string>{
+                             "cpu_percent", "hostname", "memory_total_bytes",
+                             "memory_used_bytes", "uptime_milliseconds"});
+    CHECK(value.at("cpu_percent").is_null());
 }

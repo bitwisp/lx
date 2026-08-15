@@ -738,15 +738,10 @@ int CliApp::run(
                             {ErrorCode::Unavailable, "Status metrics are unavailable",
                              0, "cli", "status"});
             }
-            if (jsonOutput) {
-                return fail("status", "read",
-                            {ErrorCode::Unsupported,
-                             "JSON status output is not available in this build",
-                             0, "cli", "status"});
-            }
             const auto result = statusService_->get();
             if (!result) return fail("status", "read", result.error());
-            printStatus(result.value(), output);
+            if (jsonOutput) output << JsonSerializer::status(result.value()) << '\n';
+            else printStatus(result.value(), output);
         } else if (*inspect) {
             const auto result = inspectService_.inspect(inspectExpression);
             if (!result) {
