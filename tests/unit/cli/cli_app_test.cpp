@@ -53,9 +53,9 @@ CliResult runCli(std::vector<std::string> arguments)
     std::ostringstream output;
     std::ostringstream error;
     const FakeProcessProvider provider;
-    const lx::application::DoctorService doctorService{provider};
     const lx::application::ProcessService processService{provider};
     const FakeSocketProvider socketProvider;
+    const lx::application::DoctorService doctorService{provider, socketProvider};
     const lx::application::PortService portService{socketProvider};
     const auto exitCode = lx::cli::CliApp{doctorService, processService, portService}.run(
         static_cast<int>(argv.size()), argv.data(), output, error);

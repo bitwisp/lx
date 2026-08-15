@@ -4,8 +4,8 @@
 
 namespace lx::application {
 
-DoctorService::DoctorService(const contracts::IProcessProvider& processProvider) noexcept
-    : processProvider_(processProvider)
+DoctorService::DoctorService(const contracts::IProcessProvider& processProvider, const contracts::ISocketProvider& socketProvider) noexcept
+    : processProvider_(processProvider), socketProvider_(socketProvider)
 {
 }
 
@@ -15,8 +15,7 @@ DoctorReport DoctorService::inspect() const
         {"Project foundation", CapabilityStatus::Available,
          "C++17 application and test infrastructure are ready"},
         {"Process API", CapabilityStatus::Unavailable, "not checked"},
-        {"Socket API", CapabilityStatus::NotImplemented,
-         "INET_DIAG provider is planned for Phase 2"},
+        {"Socket API", CapabilityStatus::Unavailable, "not checked"},
         {"systemd", CapabilityStatus::NotImplemented,
          "systemd provider is planned for Phase 5"},
         {"Journal", CapabilityStatus::NotImplemented,
@@ -30,6 +29,9 @@ DoctorReport DoctorService::inspect() const
     } else {
         check.detail = process.error().message;
     }
+    SocketQuery socketQuery; socketQuery.protocol=TransportProtocol::Tcp;
+    const auto sockets=socketProvider_.query(socketQuery); auto& socketCheck=report.checks[2];
+    if(sockets){socketCheck.status=CapabilityStatus::Available;socketCheck.detail="INET_DIAG socket inspection is available";}else socketCheck.detail=sockets.error().message;
     return report;
 }
 
