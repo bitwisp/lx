@@ -33,7 +33,9 @@ Error busError(const sd_bus_error& error, const int status,
         code = ErrorCode::Timeout;
     } else if (number == ENOENT ||
                sd_bus_error_has_name(
-                   &error, "org.freedesktop.systemd1.NoSuchUnit")) {
+                   &error, "org.freedesktop.systemd1.NoSuchUnit") ||
+               sd_bus_error_has_name(
+                   &error, "org.freedesktop.systemd1.NoUnitForPID")) {
         code = ErrorCode::NotFound;
     } else if (number == ECONNREFUSED || number == ENOTCONN ||
                sd_bus_error_has_name(&error, SD_BUS_ERROR_SERVICE_UNKNOWN) ||
@@ -198,8 +200,33 @@ SystemdServiceProvider::list() const
         return Result<Observation<std::vector<ServiceInfo>>>::failure(
             parsed.error());
     }
+    Observation<std::vector<ServiceInfo>> observation{
+        std::move(parsed).value(), {}};
+    for (auto& service : observation.value) {
+        auto fileState = unitFileState(connection.value().get(),
+                                       service.unitName);
+        if (fileState) {
+            service.unitFileState = std::move(fileState).value();
+        } else {
+            observation.warnings.push_back(warningFrom(fileState.error()));
+        }
+
+        auto path = getUnitPath(connection.value().get(), service.unitName);
+        if (!path) {
+            observation.warnings.push_back(warningFrom(path.error()));
+            continue;
+        }
+        auto mainPid = trivialProperty<std::uint32_t>(
+            connection.value().get(), path.value(), serviceInterface,
+            "MainPID", SD_BUS_TYPE_UINT32);
+        if (mainPid && mainPid.value() != 0) {
+            service.mainPid = static_cast<pid_t>(mainPid.value());
+        } else if (!mainPid) {
+            observation.warnings.push_back(warningFrom(mainPid.error()));
+        }
+    }
     return Result<Observation<std::vector<ServiceInfo>>>::success(
-        {std::move(parsed).value(), {}});
+        std::move(observation));
 }
 
 Result<Observation<ServiceInfo>> SystemdServiceProvider::get(
