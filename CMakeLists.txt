@@ -102,7 +102,13 @@ add_library(lx_linux STATIC
     src/linux/procfs/StatusParser.cpp
 )
 if(LX_HAS_SYSTEMD)
-    target_sources(lx_linux PRIVATE src/linux/systemd/SdBus.cpp)
+    target_sources(
+        lx_linux
+        PRIVATE
+            src/linux/systemd/SdBus.cpp
+            src/linux/systemd/SystemdMessageParser.cpp
+            src/linux/systemd/SystemdServiceProvider.cpp
+    )
 endif()
 add_library(lx::linux ALIAS lx_linux)
 target_link_libraries(lx_linux PUBLIC lx::core PRIVATE lx_warnings)

@@ -32,7 +32,12 @@ add_executable(
     unit/smoke_test.cpp
 )
 if(LX_HAS_SYSTEMD)
-    target_sources(lx_unit_tests PRIVATE unit/systemd/sd_bus_test.cpp)
+    target_sources(
+        lx_unit_tests
+        PRIVATE
+            unit/systemd/sd_bus_test.cpp
+            unit/systemd/systemd_message_parser_test.cpp
+    )
 endif()
 target_link_libraries(
     lx_unit_tests
