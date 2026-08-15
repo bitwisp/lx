@@ -16,6 +16,7 @@ add_executable(
     unit/application/socket_owner_resolver_contract_test.cpp
     unit/application/signal_provider_contract_test.cpp
     unit/cli/cli_app_test.cpp
+    unit/cli/json_serializer_test.cpp
     unit/domain/observation_test.cpp
     unit/domain/journal_entry_test.cpp
     unit/domain/port_info_test.cpp
@@ -61,6 +62,7 @@ target_link_libraries(
         lx::cli
         lx::linux
         lx_warnings
+        nlohmann_json::nlohmann_json
         Catch2::Catch2WithMain
 )
 lx_enable_sanitizers(lx_unit_tests)

@@ -139,7 +139,7 @@ add_library(lx::application ALIAS lx_application)
 target_link_libraries(lx_application PUBLIC lx::core PRIVATE lx_warnings)
 lx_enable_sanitizers(lx_application)
 
-add_library(lx_cli STATIC src/cli/CliApp.cpp)
+add_library(lx_cli STATIC src/cli/CliApp.cpp src/cli/JsonSerializer.cpp)
 add_library(lx::cli ALIAS lx_cli)
 target_include_directories(
     lx_cli
