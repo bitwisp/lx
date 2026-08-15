@@ -8,6 +8,7 @@
 #include <cstdlib>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <systemd/sd-bus.h>
 
 namespace lx::linux {
@@ -252,9 +253,59 @@ Result<Observation<ServiceInfo>> SystemdServiceProvider::get(
 }
 
 Result<std::optional<std::string>>
-SystemdServiceProvider::unitByPid(const pid_t) const
+SystemdServiceProvider::unitByPid(const pid_t pid) const
 {
-    return unsupported<std::optional<std::string>>("resolve PID");
+    if (pid <= 0) {
+        return Result<std::optional<std::string>>::failure(
+            {ErrorCode::InvalidArgument, "PID must be greater than zero", 0,
+             "systemd", "resolve PID"});
+    }
+
+    auto connection = SdBusConnection::openSystem();
+    if (!connection) {
+        return Result<std::optional<std::string>>::failure(connection.error());
+    }
+
+    SdBusError error;
+    SdBusMessage reply;
+    const auto systemdPid = static_cast<std::uint32_t>(pid);
+    const int status = sd_bus_call_method(
+        connection.value().get(), destination, managerPath, managerInterface,
+        "GetUnitByPID", error.get(), reply.put(), "u", systemdPid);
+    if (status < 0) {
+        auto mapped = busError(error.value(), status, "resolve PID");
+        if (mapped.code == ErrorCode::NotFound) {
+            return Result<std::optional<std::string>>::success(std::nullopt);
+        }
+        return Result<std::optional<std::string>>::failure(std::move(mapped));
+    }
+
+    const char* rawPath = nullptr;
+    if (sd_bus_message_read(reply.get(), "o", &rawPath) < 0 ||
+        rawPath == nullptr) {
+        return Result<std::optional<std::string>>::failure(
+            {ErrorCode::ProtocolError,
+             "GetUnitByPID returned no object path", 0, "systemd",
+             "resolve PID"});
+    }
+    const std::string path{rawPath};
+    auto id = stringProperty(connection.value().get(), path, unitInterface,
+                             "Id");
+    if (!id) {
+        if (id.error().code == ErrorCode::NotFound) {
+            return Result<std::optional<std::string>>::success(std::nullopt);
+        }
+        return Result<std::optional<std::string>>::failure(id.error());
+    }
+
+    constexpr std::string_view suffix = ".service";
+    if (id.value().size() <= suffix.size() ||
+        std::string_view{id.value()}.substr(id.value().size() - suffix.size()) !=
+            suffix) {
+        return Result<std::optional<std::string>>::success(std::nullopt);
+    }
+    return Result<std::optional<std::string>>::success(
+        std::optional<std::string>{std::move(id).value()});
 }
 
 Result<void> SystemdServiceProvider::start(const std::string&) const
