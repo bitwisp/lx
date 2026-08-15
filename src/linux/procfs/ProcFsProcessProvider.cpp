@@ -94,17 +94,45 @@ Result<Observation<std::vector<ProcessInfo>>> ProcFsProcessProvider::list() cons
 
     Observation<std::vector<ProcessInfo>> observed;
     observed.value.reserve(ids.value().size());
+    std::size_t permissionWarnings = 0;
+    std::size_t disappearedWarnings = 0;
+    std::size_t detailWarnings = 0;
+    const auto countWarning = [&](const ErrorCode code) {
+        if (code == ErrorCode::PermissionDenied) ++permissionWarnings;
+        else if (code == ErrorCode::NotFound) ++disappearedWarnings;
+        else ++detailWarnings;
+    };
     for (const auto pid : ids.value()) {
         auto process = get(pid);
         if (!process) {
-            observed.warnings.push_back(warningFrom(process.error()));
+            countWarning(process.error().code);
             continue;
         }
         observed.value.push_back(std::move(process.value().value));
-        observed.warnings.insert(
-            observed.warnings.end(),
-            std::make_move_iterator(process.value().warnings.begin()),
-            std::make_move_iterator(process.value().warnings.end()));
+        for (const auto& warning : process.value().warnings) {
+            countWarning(warning.code);
+        }
+    }
+    if (permissionWarnings != 0) {
+        observed.warnings.push_back({
+            ErrorCode::PermissionDenied,
+            std::to_string(permissionWarnings) +
+                " process details could not be read because of permissions",
+            0, "procfs-process-provider", "list"});
+    }
+    if (disappearedWarnings != 0) {
+        observed.warnings.push_back({
+            ErrorCode::NotFound,
+            std::to_string(disappearedWarnings) +
+                " process details disappeared during enumeration",
+            0, "procfs-process-provider", "list"});
+    }
+    if (detailWarnings != 0) {
+        observed.warnings.push_back({
+            ErrorCode::IoError,
+            std::to_string(detailWarnings) +
+                " optional process details were unavailable",
+            0, "procfs-process-provider", "list"});
     }
     return Result<Observation<std::vector<ProcessInfo>>>::success(
         std::move(observed));
