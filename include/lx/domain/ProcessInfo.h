@@ -21,8 +21,8 @@ struct ProcessInfo {
     std::vector<std::string> argv;
     std::uint64_t rssBytes = 0;
     std::uint32_t threads = 0;
+    std::optional<double> cpuPercent;
     std::optional<std::string> systemdUnit;
 };
 
 } // namespace lx
-
