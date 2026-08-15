@@ -6,6 +6,7 @@ add_executable(
     unit/application/journal_provider_contract_test.cpp
     unit/application/log_service_test.cpp
     unit/application/process_service_test.cpp
+    unit/application/resource_resolver_test.cpp
     unit/application/service_provider_contract_test.cpp
     unit/application/service_service_test.cpp
     unit/application/port_service_test.cpp

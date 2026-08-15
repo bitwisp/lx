@@ -130,6 +130,7 @@ add_library(
     src/application/LogService.cpp
     src/application/ProcessService.cpp
     src/application/PortService.cpp
+    src/application/ResourceResolver.cpp
     src/application/ServiceService.cpp
 )
 add_library(lx::application ALIAS lx_application)
