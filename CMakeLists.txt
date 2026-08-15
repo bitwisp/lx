@@ -109,6 +109,7 @@ if(LX_HAS_SYSTEMD)
             src/linux/systemd/SdBus.cpp
             src/linux/systemd/SdJournal.cpp
             src/linux/systemd/JournalFieldParser.cpp
+            src/linux/systemd/SystemdJournalProvider.cpp
             src/linux/systemd/SystemdMessageParser.cpp
             src/linux/systemd/SystemdServiceProvider.cpp
     )
