@@ -20,7 +20,16 @@ function(lx_add_runtime_dependencies)
         GIT_SHALLOW TRUE
     )
 
-    FetchContent_MakeAvailable(CLI11 fmt)
+    set(JSON_BuildTests OFF CACHE INTERNAL "")
+    set(JSON_Install OFF CACHE INTERNAL "")
+    FetchContent_Declare(
+        nlohmann_json
+        GIT_REPOSITORY https://github.com/nlohmann/json.git
+        GIT_TAG v3.12.0
+        GIT_SHALLOW TRUE
+    )
+
+    FetchContent_MakeAvailable(CLI11 fmt nlohmann_json)
 endfunction()
 
 function(lx_add_test_dependencies)

@@ -151,7 +151,7 @@ target_include_directories(
 target_link_libraries(
     lx_cli
     PUBLIC lx::application lx::core
-    PRIVATE lx_warnings CLI11::CLI11 fmt::fmt
+    PRIVATE lx_warnings CLI11::CLI11 fmt::fmt nlohmann_json::nlohmann_json
 )
 lx_enable_sanitizers(lx_cli)
 
