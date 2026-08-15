@@ -31,6 +31,9 @@ add_executable(
     unit/process/linux_signal_provider_test.cpp
     unit/smoke_test.cpp
 )
+if(LX_HAS_SYSTEMD)
+    target_sources(lx_unit_tests PRIVATE unit/systemd/sd_bus_test.cpp)
+endif()
 target_link_libraries(
     lx_unit_tests
     PRIVATE
