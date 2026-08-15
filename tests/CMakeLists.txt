@@ -4,6 +4,7 @@ add_executable(
     integration/socket/socket_ownership_test.cpp
     unit/application/doctor_service_test.cpp
     unit/application/process_service_test.cpp
+    unit/application/service_provider_contract_test.cpp
     unit/application/port_service_test.cpp
     unit/application/socket_owner_resolver_contract_test.cpp
     unit/application/signal_provider_contract_test.cpp
