@@ -71,3 +71,31 @@ TEST_CASE("ProcFsReader maps a disappeared process to not found")
     REQUIRE(result.error().message.find("Unable to read status") !=
             std::string::npos);
 }
+
+TEST_CASE("ProcFsReader enumerates sorted numeric process directories")
+{
+    TempProc fixture;
+    std::filesystem::create_directories(fixture.root() / "7");
+    std::filesystem::create_directories(fixture.root() / "100");
+    std::filesystem::create_directories(fixture.root() / "self");
+    std::filesystem::create_directories(fixture.root() / "12x");
+
+    const lx::linux::procfs::ProcFsReader reader{fixture.root()};
+    const auto result = reader.processIds();
+
+    REQUIRE(result);
+    REQUIRE(result.value() == std::vector<pid_t>{7, 42, 100});
+}
+
+TEST_CASE("ProcFsReader reports an inaccessible process root")
+{
+    const auto missing = std::filesystem::temp_directory_path() /
+                         ("lx-missing-procfs-" + std::to_string(::getpid()));
+    std::filesystem::remove_all(missing);
+    const lx::linux::procfs::ProcFsReader reader{missing};
+
+    const auto result = reader.processIds();
+
+    REQUIRE_FALSE(result);
+    REQUIRE(result.error().code == lx::ErrorCode::NotFound);
+}

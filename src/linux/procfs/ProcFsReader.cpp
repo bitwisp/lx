@@ -1,8 +1,11 @@
 #include "lx/linux/procfs/ProcFsReader.h"
 
 #include <cerrno>
+#include <algorithm>
+#include <charconv>
 #include <fstream>
 #include <iterator>
+#include <limits>
 #include <system_error>
 #include <utility>
 
@@ -59,6 +62,32 @@ Result<std::string> ProcFsReader::readLink(
             makeError(error.value(), "readlink " + name));
     }
     return Result<std::string>::success(target.string());
+}
+
+Result<std::vector<pid_t>> ProcFsReader::processIds() const
+{
+    std::error_code error;
+    std::filesystem::directory_iterator entries{root_, error};
+    if (error) {
+        return Result<std::vector<pid_t>>::failure(
+            makeError(error.value(), "enumerate processes"));
+    }
+
+    std::vector<pid_t> ids;
+    for (const auto& entry : entries) {
+        const auto name = entry.path().filename().string();
+        unsigned long value = 0;
+        const auto parsed = std::from_chars(
+            name.data(), name.data() + name.size(), value);
+        if (parsed.ec != std::errc{} || parsed.ptr != name.data() + name.size() ||
+            value == 0 ||
+            value > static_cast<unsigned long>(std::numeric_limits<pid_t>::max())) {
+            continue;
+        }
+        ids.push_back(static_cast<pid_t>(value));
+    }
+    std::sort(ids.begin(), ids.end());
+    return Result<std::vector<pid_t>>::success(std::move(ids));
 }
 
 std::filesystem::path ProcFsReader::pathFor(

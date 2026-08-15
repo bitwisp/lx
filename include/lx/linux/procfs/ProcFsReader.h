@@ -5,6 +5,7 @@
 #include <filesystem>
 #include <string>
 #include <sys/types.h>
+#include <vector>
 
 namespace lx::linux::procfs {
 
@@ -16,6 +17,7 @@ public:
                                                 const std::string& name) const;
     [[nodiscard]] Result<std::string> readLink(pid_t pid,
                                                 const std::string& name) const;
+    [[nodiscard]] Result<std::vector<pid_t>> processIds() const;
 
 private:
     [[nodiscard]] std::filesystem::path pathFor(pid_t pid,
@@ -25,4 +27,3 @@ private:
 };
 
 } // namespace lx::linux::procfs
-
