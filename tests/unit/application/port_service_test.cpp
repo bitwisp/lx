@@ -31,7 +31,7 @@ public:
     {
         requested = inodes;
         ++resolveCalls;
-        if (changeAfterFirst && resolveCalls > 1) {
+        if (changeOnCall != 0 && resolveCalls >= changeOnCall) {
             return lx::Result<lx::Observation<lx::SocketOwnership>>::success(
                 {{{42, {30}}, {84, {10}}}, {}});
         }
@@ -42,7 +42,7 @@ public:
     }
 
     mutable std::vector<std::uint64_t> requested;
-    bool changeAfterFirst = false;
+    int changeOnCall = 0;
     mutable int resolveCalls = 0;
 };
 
@@ -160,7 +160,7 @@ TEST_CASE("PortService refuses ownership changes before signaling")
 {
     const SocketProvider sockets;
     OwnerResolver owners;
-    owners.changeAfterFirst = true;
+    owners.changeOnCall = 2;
     const ProcessProvider processes;
     const SignalProvider signals;
     const lx::application::ProcessService processService{
@@ -236,4 +236,25 @@ TEST_CASE("PortService force phase sends SIGKILL and reports timeout")
     REQUIRE(result.error().code == lx::ErrorCode::Timeout);
     REQUIRE(signals.sent.size() == 2);
     REQUIRE(signals.sent.front().signal == lx::ProcessSignal::Kill);
+}
+
+TEST_CASE("PortService reports ownership changes after SIGKILL")
+{
+    const SocketProvider sockets;
+    OwnerResolver owners;
+    owners.changeOnCall = 3;
+    const ProcessProvider processes;
+    const SignalProvider signals;
+    const lx::application::ProcessService processService{
+        processes, signals, 99};
+    const lx::application::PortService service{
+        sockets, owners, processService, std::chrono::milliseconds{0}};
+    const auto plan = service.prepareRelease(8080);
+    REQUIRE(plan);
+
+    const auto result = service.force(plan.value().value);
+
+    REQUIRE_FALSE(result);
+    REQUIRE(result.error().code == lx::ErrorCode::Conflict);
+    REQUIRE(signals.sent.size() == 2);
 }

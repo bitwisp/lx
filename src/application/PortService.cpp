@@ -323,6 +323,10 @@ Result<Observation<PortReleaseResult>> PortService::force(
     if (!after) {
         return Result<Observation<PortReleaseResult>>::failure(after.error());
     }
+    if (!remainingTargetsBelongTo(plan, after.value().value)) {
+        return Result<Observation<PortReleaseResult>>::failure(
+            changedTargetError());
+    }
     return Result<Observation<PortReleaseResult>>::failure({
         ErrorCode::Timeout,
         "Port is still occupied after SIGKILL", 0,
