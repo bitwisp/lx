@@ -13,6 +13,7 @@ add_executable(
     unit/application/resource_resolver_test.cpp
     unit/application/service_provider_contract_test.cpp
     unit/application/service_service_test.cpp
+    unit/application/status_service_test.cpp
     unit/application/port_service_test.cpp
     unit/application/socket_owner_resolver_contract_test.cpp
     unit/application/signal_provider_contract_test.cpp

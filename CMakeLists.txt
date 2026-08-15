@@ -137,6 +137,7 @@ add_library(
     src/application/PortService.cpp
     src/application/ResourceResolver.cpp
     src/application/ServiceService.cpp
+    src/application/StatusService.cpp
 )
 add_library(lx::application ALIAS lx_application)
 target_link_libraries(lx_application PUBLIC lx::core PRIVATE lx_warnings)
