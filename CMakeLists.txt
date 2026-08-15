@@ -7,6 +7,9 @@ project(
     LANGUAGES CXX
 )
 
+include(GNUInstallDirs)
+set(LX_INSTALL_DOCDIR "${CMAKE_INSTALL_DATAROOTDIR}/doc/lx")
+
 option(LX_BUILD_TESTS "Build LX tests" ON)
 option(LX_BUILD_TUI "Build the terminal user interface" OFF)
 option(LX_BUILD_BENCHMARKS "Build LX benchmarks" OFF)
@@ -185,6 +188,22 @@ else()
     target_compile_definitions(lx PRIVATE LX_HAS_TUI=0)
 endif()
 lx_enable_sanitizers(lx)
+
+install(
+    TARGETS lx
+    RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
+    COMPONENT runtime
+)
+install(
+    FILES README.md LICENSE
+    DESTINATION "${LX_INSTALL_DOCDIR}"
+    COMPONENT documentation
+)
+install(
+    FILES docs/development.md docs/json-schema-v1.md
+    DESTINATION "${LX_INSTALL_DOCDIR}"
+    COMPONENT documentation
+)
 
 if(LX_ENABLE_LTO)
     include(CheckIPOSupported)
