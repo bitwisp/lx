@@ -1,6 +1,11 @@
 #include "lx/tui/FtxuiTuiRunner.h"
 
 #include "lx/application/DashboardWorker.h"
+#include "lx/application/FindService.h"
+#include "lx/application/InspectService.h"
+#include "lx/application/LogService.h"
+#include "lx/application/ProcessService.h"
+#include "lx/application/ServiceService.h"
 
 #include <ftxui/component/component.hpp>
 #include <ftxui/component/event.hpp>
@@ -11,7 +16,13 @@
 
 #include <exception>
 #include <algorithm>
+#include <condition_variable>
+#include <functional>
+#include <mutex>
+#include <optional>
+#include <sstream>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace lx::tui {
@@ -80,10 +91,137 @@ int itemCount(const DashboardSnapshot& snapshot, const int tab)
     return static_cast<int>(snapshot.processes.size());
 }
 
+std::string selectedResource(const DashboardSnapshot& snapshot,
+                             const int tab, const int selected)
+{
+    if (selected < 0 || selected >= itemCount(snapshot, tab)) return {};
+    const auto index = static_cast<std::size_t>(selected);
+    if (tab == 0) return "service:" + snapshot.services[index].unitName;
+    if (tab == 1) return "port:" +
+                         std::to_string(snapshot.ports[index].socket.local.port);
+    return "pid:" + std::to_string(snapshot.processes[index].pid);
+}
+
+std::vector<std::string> lines(const std::string& value)
+{
+    std::vector<std::string> result;
+    std::istringstream input{value};
+    std::string line;
+    while (std::getline(input, line)) result.push_back(std::move(line));
+    return result;
+}
+
+class TaskWorker final {
+public:
+    using Task = std::function<std::string()>;
+    using Updated = std::function<void()>;
+    explicit TaskWorker(Updated updated)
+        : updated_(std::move(updated)), thread_(&TaskWorker::work, this) {}
+    ~TaskWorker()
+    {
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            stopping_ = true;
+        }
+        wake_.notify_all();
+        thread_.join();
+    }
+    bool submit(Task task)
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (pending_ || busy_) return false;
+        pending_ = std::move(task);
+        result_ = "Loading...";
+        wake_.notify_one();
+        return true;
+    }
+    std::string result() const
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return result_;
+    }
+    void clear()
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        result_.clear();
+    }
+private:
+    void work() noexcept
+    {
+        std::unique_lock<std::mutex> lock(mutex_);
+        while (true) {
+            wake_.wait(lock, [this] { return stopping_ || pending_.has_value(); });
+            if (stopping_) break;
+            auto task = std::move(*pending_);
+            pending_.reset();
+            busy_ = true;
+            lock.unlock();
+            std::string value;
+            try { value = task(); }
+            catch (const std::exception& error) { value = error.what(); }
+            catch (...) { value = "Unknown background task failure"; }
+            lock.lock();
+            result_ = std::move(value);
+            busy_ = false;
+            lock.unlock();
+            if (updated_) updated_();
+            lock.lock();
+        }
+    }
+    Updated updated_;
+    mutable std::mutex mutex_;
+    std::condition_variable wake_;
+    std::optional<Task> pending_;
+    std::string result_;
+    std::thread thread_;
+    bool busy_ = false;
+    bool stopping_ = false;
+};
+
+std::string inspectText(const Result<ResourceGraph>& result)
+{
+    if (!result) return "Inspect failed: " + result.error().message;
+    const auto& graph = result.value();
+    std::ostringstream out;
+    out << "Inspect result\n"
+        << "Processes: " << graph.processes.size() << '\n'
+        << "Ports: " << graph.ports.size() << '\n'
+        << "Services: " << graph.services.size() << '\n'
+        << "Recent logs: " << graph.recentLogs.size();
+    for (const auto& process : graph.processes) {
+        out << "\nPID " << process.pid << "  " << process.name;
+    }
+    for (const auto& service : graph.services) {
+        out << "\n" << service.unitName << "  " << service.activeState;
+    }
+    return out.str();
+}
+
+std::string findText(const Result<FindResult>& result)
+{
+    if (!result) return "Find failed: " + result.error().message;
+    const auto& found = result.value();
+    std::ostringstream out;
+    out << "Find results\nServices: " << found.services.size()
+        << "  Processes: " << found.processes.size()
+        << "  Ports: " << found.ports.size();
+    for (const auto& service : found.services) out << "\nservice  " << service.unitName;
+    for (const auto& process : found.processes) out << "\nprocess  " << process.pid << " " << process.name;
+    for (const auto& port : found.ports) out << "\nport     " << port.socket.local.port;
+    for (const auto& executable : found.executables) out << "\nexe      " << executable;
+    return out.str();
+}
+
 } // namespace
 
-FtxuiTuiRunner::FtxuiTuiRunner(application::DashboardService& dashboard)
-    : dashboard_(dashboard)
+FtxuiTuiRunner::FtxuiTuiRunner(application::DashboardService& dashboard,
+                               const application::InspectService& inspect,
+                               const application::FindService& find,
+                               const application::LogService& logs,
+                               const application::ProcessService& processes,
+                               const application::ServiceService& services)
+    : dashboard_(dashboard), inspect_(inspect), find_(find), logs_(logs),
+      processes_(processes), services_(services)
 {
 }
 
@@ -96,8 +234,13 @@ Result<void> FtxuiTuiRunner::run()
         int tab = 0;
         int selected[] = {0, 0, 0};
         const char* tabs[] = {"Services", "Ports", "Processes"};
+        bool searching = false;
+        bool help = false;
+        std::string searchQuery;
+        auto searchInput = Input(&searchQuery, "name, PID, port, path...");
+        TaskWorker tasks{[&screen] { screen.PostEvent(Event::Custom); }};
 
-        auto content = Renderer([&] {
+        auto content = Renderer(searchInput, [&] {
             const auto snapshot = worker.snapshot();
             Elements rows;
             rows.push_back(text(" LX resource dashboard ") | bold | center);
@@ -126,20 +269,65 @@ Result<void> FtxuiTuiRunner::run()
                                                        : label);
                 }
                 rows.push_back(hbox(std::move(tabElements)));
-                rows.push_back(resourcePanel(*snapshot, tab, selected[tab]));
+                const auto taskResult = tasks.result();
+                if (help) {
+                    rows.push_back(vbox({text("Keyboard help") | bold,
+                        text("Tab/Left/Right  switch panel"),
+                        text("Up/Down         select resource"),
+                        text("Enter           inspect selected resource"),
+                        text("/               find resources"),
+                        text("l               recent logs for selected resource"),
+                        text("Esc             close view / quit"),
+                        text("q               quit")}) | border | flex);
+                } else if (!taskResult.empty()) {
+                    Elements resultLines;
+                    for (const auto& line : lines(taskResult)) resultLines.push_back(text(line));
+                    rows.push_back(vbox(std::move(resultLines)) | border | flex);
+                } else {
+                    rows.push_back(resourcePanel(*snapshot, tab, selected[tab]));
+                }
                 if (!snapshot->warnings.empty()) {
                     rows.push_back(separator());
                     rows.push_back(text("Warning: " + snapshot->warnings.front().message) |
                                    color(Color::Yellow));
                 }
             }
+            if (searching) {
+                rows.push_back(hbox({text(" Find: "), searchInput->Render()}) |
+                               border);
+            }
             rows.push_back(separator());
             rows.push_back(text(" Tab switch panel   arrows select   Enter inspect   / find   l logs   F1 help   q quit ") | dim);
             return vbox(std::move(rows)) | border;
         });
         auto root = CatchEvent(content, [&](const Event& event) {
-            if (event == Event::Character('q') || event == Event::Escape) {
+            if (searching && event == Event::Return) {
+                if (!searchQuery.empty()) {
+                    const auto query = searchQuery;
+                    tasks.submit([this, query] { return findText(find_.find(query)); });
+                }
+                searching = false;
+                return true;
+            }
+            if (event == Event::Escape && (searching || help || !tasks.result().empty())) {
+                searching = false;
+                help = false;
+                tasks.clear();
+                return true;
+            }
+            if (!searching && (event == Event::Character('q') || event == Event::Escape)) {
                 screen.ExitLoopClosure()();
+                return true;
+            }
+            if (!searching && event == Event::F1) {
+                help = !help;
+                tasks.clear();
+                return true;
+            }
+            if (!searching && event == Event::Character('/')) {
+                searching = true;
+                searchQuery.clear();
+                help = false;
                 return true;
             }
             if (event == Event::Tab) {
@@ -155,6 +343,36 @@ Result<void> FtxuiTuiRunner::run()
                 return true;
             }
             const auto snapshot = worker.snapshot();
+            if (!searching && snapshot && event == Event::Return) {
+                const auto resource = selectedResource(*snapshot, tab, selected[tab]);
+                if (!resource.empty()) {
+                    tasks.submit([this, resource] {
+                        return inspectText(inspect_.inspect(resource));
+                    });
+                }
+                return true;
+            }
+            if (!searching && snapshot && event == Event::Character('l')) {
+                LogQuery query;
+                query.limit = 20;
+                if (tab == 0 && selected[tab] < itemCount(*snapshot, tab)) {
+                    query.unit = snapshot->services[static_cast<std::size_t>(selected[tab])].unitName;
+                } else if (tab == 2 && selected[tab] < itemCount(*snapshot, tab)) {
+                    query.pid = snapshot->processes[static_cast<std::size_t>(selected[tab])].pid;
+                } else {
+                    tasks.submit([] { return std::string{"Select a service or process to view logs"}; });
+                    return true;
+                }
+                tasks.submit([this, query] {
+                    const auto result = logs_.read(query);
+                    if (!result) return std::string{"Logs failed: "} + result.error().message;
+                    std::ostringstream out;
+                    out << "Recent logs (" << result.value().value.size() << ")";
+                    for (const auto& entry : result.value().value) out << "\n" << entry.message;
+                    return out.str();
+                });
+                return true;
+            }
             if (snapshot && event == Event::ArrowUp) {
                 selected[tab] = std::max(0, selected[tab] - 1);
                 return true;
@@ -165,6 +383,7 @@ Result<void> FtxuiTuiRunner::run()
                     selected[tab] + 1);
                 return true;
             }
+            if (!searching && event.is_character()) return true;
             return false;
         });
 

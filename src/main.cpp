@@ -67,7 +67,9 @@ int main(const int argc, char** argv)
 #if LX_HAS_TUI
     lx::application::DashboardService dashboardService{
         metricsService, processService, portService, serviceService};
-    lx::tui::FtxuiTuiRunner tuiRunner{dashboardService};
+    lx::tui::FtxuiTuiRunner tuiRunner{
+        dashboardService, inspectService, findService, logService,
+        processService, serviceService};
     if (argc == 1 && ::isatty(STDIN_FILENO) && ::isatty(STDOUT_FILENO)) {
         const auto result = tuiRunner.run();
         if (!result) {
