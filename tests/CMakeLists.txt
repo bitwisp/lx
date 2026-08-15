@@ -39,6 +39,7 @@ if(LX_HAS_SYSTEMD)
         lx_unit_tests
         PRIVATE
             unit/systemd/sd_bus_test.cpp
+            unit/systemd/sd_journal_test.cpp
             unit/systemd/systemd_message_parser_test.cpp
             unit/systemd/systemd_service_provider_test.cpp
             integration/systemd/systemd_provider_test.cpp
