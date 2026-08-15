@@ -7,9 +7,10 @@ namespace lx::application {
 DoctorService::DoctorService(
     const contracts::IProcessProvider& processProvider,
     const contracts::ISocketProvider& socketProvider,
-    const contracts::ISignalProvider& signalProvider) noexcept
+    const contracts::ISignalProvider& signalProvider,
+    const contracts::IServiceProvider& serviceProvider) noexcept
     : processProvider_(processProvider), socketProvider_(socketProvider),
-      signalProvider_(signalProvider)
+      signalProvider_(signalProvider), serviceProvider_(serviceProvider)
 {
 }
 
@@ -21,8 +22,7 @@ DoctorReport DoctorService::inspect() const
         {"Process API", CapabilityStatus::Unavailable, "not checked"},
         {"Socket API", CapabilityStatus::Unavailable, "not checked"},
         {"Process signals", CapabilityStatus::Unavailable, "not checked"},
-        {"systemd", CapabilityStatus::NotImplemented,
-         "systemd provider is planned for Phase 5"},
+        {"systemd", CapabilityStatus::Unavailable, "not checked"},
         {"Journal", CapabilityStatus::NotImplemented,
          "journal provider is planned for Phase 6"},
     }};
@@ -46,6 +46,14 @@ DoctorReport DoctorService::inspect() const
                                  : "Process signaling uses kill(2) fallback";
     } else {
         signalCheck.detail = "Process signaling is unavailable";
+    }
+    const auto systemd = serviceProvider_.probe();
+    auto& systemdCheck = report.checks[4];
+    if (systemd) {
+        systemdCheck.status = CapabilityStatus::Available;
+        systemdCheck.detail = "systemd service management is available";
+    } else {
+        systemdCheck.detail = systemd.error().message;
     }
     return report;
 }

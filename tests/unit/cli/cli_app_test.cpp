@@ -168,7 +168,7 @@ CliResult runCli(std::vector<std::string> arguments,
     const FakeSocketProvider socketProvider{releaseStage};
     const FakeSocketOwnerResolver socketOwnerResolver;
     const lx::application::DoctorService doctorService{
-        provider, socketProvider, signalProvider};
+        provider, socketProvider, signalProvider, serviceProvider};
     const lx::application::PortService portService{
         socketProvider, socketOwnerResolver, processService, &serviceService};
     const auto exitCode = lx::cli::CliApp{doctorService, processService,
@@ -332,7 +332,7 @@ TEST_CASE("CLI doctor clearly distinguishes pending capabilities")
             std::string::npos);
     const auto systemdPosition = result.output.find("systemd");
     REQUIRE(systemdPosition != std::string::npos);
-    REQUIRE(result.output.substr(systemdPosition, 64).find("not implemented") !=
+    REQUIRE(result.output.substr(systemdPosition, 64).find("OK") !=
             std::string::npos);
     REQUIRE(result.error.empty());
 }
