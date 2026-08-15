@@ -58,6 +58,7 @@ add_library(lx_linux STATIC
     src/linux/procfs/CmdlineParser.cpp
     src/linux/procfs/PasswdUserResolver.cpp
     src/linux/procfs/ProcFsReader.cpp
+    src/linux/procfs/SocketFdTarget.cpp
     src/linux/procfs/ProcFsProcessProvider.cpp
     src/linux/procfs/StatParser.cpp
     src/linux/procfs/StatusParser.cpp
