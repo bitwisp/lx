@@ -3,6 +3,7 @@
 #include "lx/application/ProcessService.h"
 #include "lx/application/PortService.h"
 #include "lx/application/ServiceService.h"
+#include "lx/application/LogService.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -147,6 +148,37 @@ private:
     int& releaseStage_;
 };
 
+class FakeJournalProvider final : public lx::contracts::IJournalProvider {
+public:
+    lx::Result<void> probe() const override { return lx::Result<void>::success(); }
+
+    lx::Result<lx::Observation<std::vector<lx::JournalEntry>>> query(
+        const lx::LogQuery& query) const override
+    {
+        lastQuery = query;
+        lx::JournalEntry entry;
+        entry.timestamp = std::chrono::system_clock::time_point{
+            std::chrono::seconds{1}};
+        entry.systemdUnit = query.unit;
+        entry.pid = query.pid.value_or(42);
+        entry.command = "demo";
+        entry.message = "first\nsecond\x1b";
+        entry.priority = 6;
+        return lx::Result<lx::Observation<std::vector<lx::JournalEntry>>>::success(
+            {{std::move(entry)}, {}});
+    }
+
+    lx::Result<void> follow(
+        const lx::LogQuery&, const lx::contracts::JournalEntrySink&,
+        const lx::contracts::JournalStopRequested&) const override
+    {
+        return lx::Result<void>::failure(
+            {lx::ErrorCode::Unsupported, "not used", 0, "fake", "follow"});
+    }
+
+    mutable lx::LogQuery lastQuery;
+};
+
 struct CliResult {
     int exitCode;
     std::string output;
@@ -170,6 +202,8 @@ CliResult runCli(std::vector<std::string> arguments,
     const FakeSignalProvider signalProvider{releaseStage};
     const FakeServiceProvider serviceProvider{releaseStage};
     const lx::application::ServiceService serviceService{serviceProvider};
+    const FakeJournalProvider journalProvider;
+    const lx::application::LogService logService{journalProvider};
     const lx::application::ProcessService processService{
         provider, signalProvider, 999, &serviceService};
     const FakeSocketProvider socketProvider{releaseStage};
@@ -179,7 +213,8 @@ CliResult runCli(std::vector<std::string> arguments,
     const lx::application::PortService portService{
         socketProvider, socketOwnerResolver, processService, &serviceService};
     const auto exitCode = lx::cli::CliApp{doctorService, processService,
-                                         portService, serviceService}.run(
+                                         portService, serviceService,
+                                         logService}.run(
         static_cast<int>(argv.size()), argv.data(), input, output, error);
     return {exitCode, output.str(), error.str()};
 }
@@ -228,6 +263,28 @@ TEST_CASE("CLI controls services with conservative confirmation")
         {"lx", "service", "demo", "restart", "--yes"});
     REQUIRE(restarted.exitCode == 0);
     REQUIRE(restarted.output.find("restart submitted") != std::string::npos);
+}
+
+TEST_CASE("CLI queries journal by service or PID")
+{
+    const auto byService = runCli(
+        {"lx", "log", "demo", "--lines", "10", "--since", "10m"});
+    REQUIRE(byService.exitCode == 0);
+    REQUIRE(byService.output.find("demo.service") != std::string::npos);
+    REQUIRE(byService.output.find("first\\nsecond\\x1b") !=
+            std::string::npos);
+
+    const auto byPid = runCli({"lx", "log", "--pid", "42"});
+    REQUIRE(byPid.exitCode == 0);
+    REQUIRE(byPid.output.find("[42]") != std::string::npos);
+}
+
+TEST_CASE("CLI validates journal query arguments")
+{
+    REQUIRE(runCli({"lx", "log"}).exitCode == 2);
+    REQUIRE(runCli({"lx", "log", "demo", "--lines", "0"}).exitCode == 2);
+    REQUIRE(runCli({"lx", "log", "demo", "--since", "last week"})
+                .exitCode == 2);
 }
 
 TEST_CASE("CLI confirms graceful and forced port release")

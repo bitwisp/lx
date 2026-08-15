@@ -5,6 +5,7 @@
 #include "lx/application/ProcessService.h"
 #include "lx/application/PortService.h"
 #include "lx/application/ServiceService.h"
+#include "lx/application/LogService.h"
 
 #include <CLI/CLI.hpp>
 #include <fmt/format.h>
@@ -236,6 +237,84 @@ std::string tableCell(const std::string_view value, const std::size_t width)
     return cell;
 }
 
+std::string shortened(const std::string& value, const std::size_t width)
+{
+    if (value.size() <= width) return value;
+    return width > 3 ? value.substr(0, width - 3) + "..."
+                     : value.substr(0, width);
+}
+
+std::string safeLogText(const std::string& value,
+                        const std::size_t limit = 4096)
+{
+    std::string result;
+    result.reserve(std::min(value.size(), limit));
+    for (const unsigned char character : value) {
+        if (result.size() >= limit) {
+            result += "...";
+            break;
+        }
+        switch (character) {
+        case '\n': result += "\\n"; break;
+        case '\r': result += "\\r"; break;
+        case '\t': result += "\\t"; break;
+        default:
+            if (character < 0x20 || character == 0x7f) {
+                result += fmt::format("\\x{:02x}", character);
+            } else {
+                result.push_back(static_cast<char>(character));
+            }
+        }
+    }
+    return result;
+}
+
+std::string_view priorityText(const std::optional<std::uint8_t> priority)
+{
+    if (!priority) return "unknown";
+    constexpr std::string_view names[] = {
+        "emerg", "alert", "crit", "err", "warning", "notice", "info",
+        "debug"};
+    return *priority < 8 ? names[*priority] : "unknown";
+}
+
+std::string logTimestamp(const std::chrono::system_clock::time_point timestamp)
+{
+    const auto time = std::chrono::system_clock::to_time_t(timestamp);
+    std::tm local{};
+    if (localtime_r(&time, &local) == nullptr) return "-";
+    std::ostringstream formatted;
+    formatted << std::put_time(&local, "%F %T");
+    return formatted.str();
+}
+
+void printJournalEntry(const Observation<JournalEntry>& observed,
+                       std::ostream& output, std::ostream& error)
+{
+    const auto& entry = observed.value;
+    std::string source = entry.systemdUnit.value_or("-");
+    if (entry.pid) source += '[' + std::to_string(*entry.pid) + ']';
+    if (entry.command) source += ' ' + shortened(*entry.command, 24);
+    output << fmt::format("{} {:<7} {}: {}\n", logTimestamp(entry.timestamp),
+                          priorityText(entry.priority), shortened(source, 56),
+                          safeLogText(entry.message));
+    for (const auto& warning : observed.warnings) {
+        error << "Warning: " << warning.message << '\n';
+    }
+}
+
+void printJournalEntries(
+    const Observation<std::vector<JournalEntry>>& observed,
+    std::ostream& output, std::ostream& error)
+{
+    for (const auto& entry : observed.value) {
+        printJournalEntry({entry, {}}, output, error);
+    }
+    for (const auto& warning : observed.warnings) {
+        error << "Warning: " << warning.message << '\n';
+    }
+}
+
 void printServices(const Observation<std::vector<ServiceInfo>>& observed,
                    std::ostream& output, std::ostream& error)
 {
@@ -300,9 +379,11 @@ int exitCode(const ErrorCode code)
 CliApp::CliApp(const application::DoctorService& doctorService,
                const application::ProcessService& processService,
                const application::PortService& portService,
-               const application::ServiceService& serviceService) noexcept
+               const application::ServiceService& serviceService,
+               const application::LogService& logService) noexcept
     : doctorService_(doctorService), processService_(processService),
-      portService_(portService), serviceService_(serviceService)
+      portService_(portService), serviceService_(serviceService),
+      logService_(logService)
 {
 }
 
@@ -355,6 +436,21 @@ int CliApp::run(
         ->check(CLI::IsMember({"start", "stop", "restart"}));
     service->add_flag("--yes", confirmServiceAction,
                       "Skip stop and restart confirmation");
+    auto* log = app.add_subcommand("log", "Query journal entries");
+    std::string logUnit;
+    pid_t logPid = -1;
+    std::uint32_t logLines = 50;
+    std::string logSince;
+    auto* logUnitOption = log->add_option("unit", logUnit,
+                                          "Service unit name");
+    auto* logPidOption = log->add_option("--pid", logPid, "Process ID")
+                             ->check(CLI::Range(
+                                 1, std::numeric_limits<pid_t>::max()));
+    log->add_option("--lines", logLines, "Maximum journal entries")
+        ->check(CLI::Range(1, 10000));
+    auto* logSinceOption = log->add_option(
+        "--since", logSince,
+        "Start time: YYYY-MM-DD HH:MM:SS, 30s, 10m, 2h, or 3d");
 
     try {
         app.parse(argc, argv);
@@ -444,6 +540,25 @@ int CliApp::run(
                 output << fmt::format("{} submitted for {}\n",
                                       serviceAction, serviceUnit);
             }
+        } else if (*log) {
+            LogQuery query;
+            if (logUnitOption->count() != 0) query.unit = logUnit;
+            if (logPidOption->count() != 0) query.pid = logPid;
+            query.limit = logLines;
+            if (logSinceOption->count() != 0) {
+                auto since = application::LogService::parseSince(logSince);
+                if (!since) {
+                    error << since.error().message << '\n';
+                    return exitCode(since.error().code);
+                }
+                query.since = since.value();
+            }
+            const auto result = logService_.read(std::move(query));
+            if (!result) {
+                error << result.error().message << '\n';
+                return exitCode(result.error().code);
+            }
+            printJournalEntries(result.value(), output, error);
         } else if (*freePort) {
             auto plan = portService_.prepareRelease(
                 static_cast<std::uint16_t>(freePortNumber));

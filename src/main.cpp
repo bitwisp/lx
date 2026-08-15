@@ -3,9 +3,12 @@
 #include "lx/application/ProcessService.h"
 #include "lx/application/PortService.h"
 #include "lx/application/ServiceService.h"
+#include "lx/application/LogService.h"
 #if LX_HAS_SYSTEMD
+#include "lx/linux/systemd/SystemdJournalProvider.h"
 #include "lx/linux/systemd/SystemdServiceProvider.h"
 #else
+#include "lx/linux/systemd/UnavailableJournalProvider.h"
 #include "lx/linux/systemd/UnavailableServiceProvider.h"
 #endif
 #include "lx/linux/procfs/ProcFsProcessProvider.h"
@@ -22,11 +25,15 @@ int main(const int argc, char** argv)
     const lx::linux::process::LinuxSignalProvider signalProvider;
 #if LX_HAS_SYSTEMD
     const lx::linux::SystemdServiceProvider serviceProvider;
+    const lx::linux::SystemdJournalProvider journalProvider;
 #else
     const lx::linux::UnavailableServiceProvider serviceProvider{
         "LX was built without libsystemd support"};
+    const lx::linux::UnavailableJournalProvider journalProvider{
+        "LX was built without libsystemd support"};
 #endif
     const lx::application::ServiceService serviceService{serviceProvider};
+    const lx::application::LogService logService{journalProvider};
     const lx::application::ProcessService processService{
         processProvider, signalProvider, ::getpid(), &serviceService};
     const lx::linux::netlink::NetlinkSocketProvider socketProvider;
@@ -36,6 +43,6 @@ int main(const int argc, char** argv)
     const lx::application::DoctorService doctorService{
         processProvider, socketProvider, signalProvider, serviceProvider};
     return lx::cli::CliApp{doctorService, processService, portService,
-                           serviceService}.run(
+                           serviceService, logService}.run(
         argc, argv, std::cin, std::cout, std::cerr);
 }
