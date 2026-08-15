@@ -6,7 +6,7 @@
 #include <unistd.h>
 #include <utility>
 namespace lx::linux::netlink { namespace {
-Error error(const char* op) { return {ErrorCode::IoError, std::string("Unable to ")+op+": "+std::system_category().message(errno), errno, "netlink-socket", op}; }
+Error error(const char* op) { const auto code=(errno==EACCES||errno==EPERM)?ErrorCode::PermissionDenied:ErrorCode::IoError; return {code, std::string("Unable to ")+op+": "+std::system_category().message(errno), errno, "netlink-socket", op}; }
 } 
 Result<NetlinkSocket> NetlinkSocket::open() {
     int fd = ::socket(AF_NETLINK, SOCK_RAW | SOCK_CLOEXEC, NETLINK_SOCK_DIAG);
