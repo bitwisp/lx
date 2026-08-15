@@ -52,6 +52,7 @@ add_library(lx_warnings INTERFACE)
 lx_set_project_warnings(lx_warnings)
 
 add_library(lx_linux STATIC
+    src/linux/process/PidFd.cpp
     src/linux/netlink/InetDiagCodec.cpp
     src/linux/netlink/NetlinkSocket.cpp
     src/linux/netlink/NetlinkSocketProvider.cpp
