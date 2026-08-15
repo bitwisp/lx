@@ -204,6 +204,11 @@ install(
     DESTINATION "${LX_INSTALL_DOCDIR}"
     COMPONENT documentation
 )
+install(
+    FILES docs/lx.1
+    DESTINATION "${CMAKE_INSTALL_MANDIR}/man1"
+    COMPONENT documentation
+)
 
 if(LX_ENABLE_LTO)
     include(CheckIPOSupported)

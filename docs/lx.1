@@ -1,0 +1,158 @@
+.TH LX 1 "August 2026" "LX 0.1.0" "User Commands"
+.SH NAME
+lx \- inspect and manage related Linux resources
+.SH SYNOPSIS
+.B lx
+.RI [ global-options ]
+.I command
+.RI [ command-options ]
+.SH DESCRIPTION
+LX provides a unified view of processes, listening sockets, systemd services,
+and journal entries. It uses procfs, Netlink, pidfd, sd-bus, and sd-journal
+directly and does not invoke traditional administration commands.
+.SH GLOBAL OPTIONS
+.TP
+.BR \-\-json
+Write stable schema version 1 JSON for read-only commands.
+.TP
+.BR \-\-quiet
+Suppress non-essential diagnostics and successful action messages.
+.TP
+.BR \-\-no-color
+Disable ANSI color output. A non-empty
+.B NO_COLOR
+environment variable has the same effect.
+.TP
+.BR \-\-version
+Print the LX version.
+.TP
+.BR \-h , " \-\-help"
+Show help.
+.SH COMMANDS
+.TP
+.B status
+Show sampled host CPU usage, memory usage, and uptime.
+.TP
+.BR "process" " [PID] [--name NAME] [--user USER|UID] [--service UNIT]"
+List processes or inspect one PID. Process CPU follows top-style semantics and
+may exceed 100 percent on multi-core systems. Use
+.B --raw-command
+with a PID to disable best-effort command secret redaction.
+.TP
+.BR "process stop" " PID"
+Send SIGTERM after validating the target.
+.TP
+.BR "process kill" " PID [--yes]"
+Send SIGKILL. Confirmation is required unless
+.B --yes
+is supplied. PID 1 and the running LX process are always rejected.
+.TP
+.BR "port" " [PORT]"
+List listening TCP sockets and unconnected UDP bindings, or inspect a local
+port. Visible process and service owners are included.
+.TP
+.BR "port free" " PORT [--yes]"
+Release a port using a revalidated ownership snapshot. LX prefers stopping one
+common systemd service; otherwise it sends SIGTERM and optionally SIGKILL.
+.TP
+.BR "service" " [UNIT] [start|stop|restart] [--yes]"
+List, inspect, or control systemd services. The
+.B svc
+alias is also accepted. Missing unit suffixes are normalized to
+.B .service
+and stop or restart requires confirmation unless
+.B --yes
+is supplied.
+.TP
+.BR "log" " [UNIT] [--pid PID] [--lines N] [--since TIME] [--follow]"
+Read journal entries filtered by service, PID, or both. Relative times use
+.BR 30s , " 10m" , " 2h" ,
+or
+.BR 3d ;
+absolute local timestamps use
+.BR "YYYY-MM-DD HH:MM:SS" .
+Follow mode exits with status 130 after Ctrl-C.
+.TP
+.BR "inspect" " RESOURCE"
+Inspect a related resource graph. Explicit forms are
+.BR port:PORT , " pid:PID" ,
+and
+.BR service:UNIT .
+.TP
+.BR "find" " QUERY"
+Search currently observable services, processes, ports, and executable paths.
+.TP
+.B doctor
+Report runtime capability and backend availability.
+.TP
+.B tui
+Open the optional interactive dashboard. TUI-enabled builds also open it when
+run without arguments from an interactive terminal.
+.SH TUI KEYS
+.TP
+.BR Tab , " Left" , " Right"
+Switch between Services, Ports, and Processes.
+.TP
+.BR Up , " Down"
+Select a resource.
+.TP
+.B Enter
+Inspect the selected resource.
+.TP
+.BR / , " l"
+Find resources or show recent logs.
+.TP
+.BR s , " r"
+Confirm stopping or restarting the selected service.
+.TP
+.BR k , " K"
+Confirm SIGTERM or double-confirm SIGKILL for the selected process.
+.TP
+.BR F1 , " Esc" , " q"
+Show help, close the current view, or exit.
+.SH EXIT STATUS
+.TP
+.B 0
+Success.
+.TP
+.B 2
+Invalid arguments.
+.TP
+.B 3
+Resource not found.
+.TP
+.B 4
+Permission denied.
+.TP
+.B 5
+I/O, protocol, parse, or operation failure.
+.TP
+.B 6
+Unsupported or unavailable capability.
+.TP
+.B 7
+Conflict or ambiguous resource.
+.TP
+.B 8
+Timeout.
+.TP
+.B 130
+Interrupted by Ctrl-C.
+.SH FILES
+.TP
+.I /proc
+Process and system metrics source.
+.SH ENVIRONMENT
+.TP
+.B NO_COLOR
+Disable ANSI colors when non-empty.
+.SH SECURITY
+LX never stores privilege passwords. Destructive operations are explicit,
+validate protected targets, and conservatively confirm by default. Process
+environment variables are not read; common secret command arguments are
+redacted unless
+.B --raw-command
+is explicitly requested.
+.SH SEE ALSO
+.BR systemd (1),
+.BR proc (5)
