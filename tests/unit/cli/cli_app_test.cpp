@@ -321,6 +321,37 @@ TEST_CASE("CLI streams followed logs as independent NDJSON documents")
     CHECK(event.at("data").contains("entry"));
 }
 
+TEST_CASE("CLI returns structured JSON errors with stable exit codes")
+{
+    const auto missing = runCli({"lx", "process", "404", "--json"});
+    REQUIRE(missing.exitCode == 3);
+    CHECK(missing.error.empty());
+    const auto failure = nlohmann::json::parse(missing.output);
+    CHECK(failure.at("command") == "process");
+    CHECK(failure.at("error").at("code") == "not_found");
+
+    const auto invalid = runCli({"lx", "process", "0", "--json"});
+    REQUIRE(invalid.exitCode == 2);
+    CHECK(invalid.error.empty());
+    CHECK(nlohmann::json::parse(invalid.output)
+              .at("error").at("code") == "invalid_argument");
+}
+
+TEST_CASE("CLI rejects JSON mode before destructive actions")
+{
+    for (const auto& command : std::vector<std::vector<std::string>>{
+             {"lx", "process", "stop", "42", "--json"},
+             {"lx", "process", "kill", "42", "--yes", "--json"},
+             {"lx", "port", "free", "8080", "--yes", "--json"},
+             {"lx", "service", "demo", "stop", "--yes", "--json"}}) {
+        const auto result = runCli(command);
+        REQUIRE(result.exitCode == 2);
+        CHECK(result.error.empty());
+        CHECK(nlohmann::json::parse(result.output)
+                  .at("error").at("code") == "invalid_argument");
+    }
+}
+
 TEST_CASE("CLI validates port range") { REQUIRE(runCli({"lx","port","0"}).exitCode==2); REQUIRE(runCli({"lx","port","65536"}).exitCode==2); }
 
 TEST_CASE("CLI lists and inspects services")

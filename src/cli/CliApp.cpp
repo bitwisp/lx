@@ -25,6 +25,7 @@
 #include <iomanip>
 #include <sstream>
 #include <type_traits>
+#include <string_view>
 
 namespace lx::cli {
 
@@ -549,9 +550,12 @@ int CliApp::run(
     std::ostream& output,
     std::ostream& error) const
 {
+    bool jsonOutput = false;
+    for (int index = 1; index < argc; ++index) {
+        if (std::string_view{argv[index]} == "--json") jsonOutput = true;
+    }
     CLI::App app{"Resource-oriented Linux inspection and management tool", "lx"};
     app.set_version_flag("--version", fmt::format("LX {}", lx::version));
-    bool jsonOutput = false;
     app.add_flag("--json", jsonOutput, "Write stable machine-readable JSON");
     const auto addJsonFlag = [&jsonOutput](CLI::App* command) {
         command->add_flag("--json", jsonOutput,
@@ -645,6 +649,25 @@ int CliApp::run(
 
     try {
         app.parse(argc, argv);
+        const auto fail = [&](const std::string& command,
+                              const std::string& operation,
+                              const Error& failure) {
+            if (jsonOutput) {
+                output << JsonSerializer::error(command, operation, failure)
+                       << '\n';
+            } else error << failure.message << '\n';
+            return exitCode(failure.code);
+        };
+        if (jsonOutput &&
+            (*stopProcess || *killProcess || *freePort ||
+             (*service && !serviceAction.empty()))) {
+            const std::string command = *freePort ? "port" :
+                                        (*service ? "service" : "process");
+            return fail(command, "mutate",
+                        {ErrorCode::InvalidArgument,
+                         "--json is only supported by read-only commands", 0,
+                         "cli", "validate"});
+        }
         if (*doctor) {
             const auto report = doctorService_.inspect();
             if (jsonOutput) output << JsonSerializer::doctor(report) << '\n';
@@ -652,37 +675,32 @@ int CliApp::run(
         } else if (*inspect) {
             const auto result = inspectService_.inspect(inspectExpression);
             if (!result) {
-                error << result.error().message << '\n';
-                return exitCode(result.error().code);
+                return fail("inspect", "inspect", result.error());
             }
             if (jsonOutput) output << JsonSerializer::inspect(result.value()) << '\n';
             else printResourceGraph(result.value(), output, error);
         } else if (*find) {
             const auto result = findService_.find(findQuery);
             if (!result) {
-                error << result.error().message << '\n';
-                return exitCode(result.error().code);
+                return fail("find", "search", result.error());
             }
             if (jsonOutput) output << JsonSerializer::find(result.value()) << '\n';
             else printFindResult(result.value(), output, error);
         } else if (*stopProcess) {
             const auto result = processService_.stop(stopPid);
             if (!result) {
-                error << result.error().message << '\n';
-                return exitCode(result.error().code);
+                return fail("process", "stop", result.error());
             }
             output << fmt::format("Sent SIGTERM to PID {} via {}\n", stopPid,
                                   mechanismName(result.value().mechanism));
         } else if (*killProcess) {
             const auto valid = processService_.validateSignalTarget(killPid);
             if (!valid) {
-                error << valid.error().message << '\n';
-                return exitCode(valid.error().code);
+                return fail("process", "kill", valid.error());
             }
             const auto target = processService_.inspect(killPid);
             if (!target) {
-                error << target.error().message << '\n';
-                return exitCode(target.error().code);
+                return fail("process", "kill", target.error());
             }
             if (!confirmKill && !confirm(
                     input, output,
@@ -694,8 +712,7 @@ int CliApp::run(
             }
             const auto result = processService_.kill(killPid);
             if (!result) {
-                error << result.error().message << '\n';
-                return exitCode(result.error().code);
+                return fail("process", "kill", result.error());
             }
             output << fmt::format("Sent SIGKILL to PID {} via {}\n", killPid,
                                   mechanismName(result.value().mechanism));
@@ -704,13 +721,17 @@ int CliApp::run(
                                     processUserOption->count() != 0 ||
                                     processServiceOption->count() != 0;
             if (processPidOption->count() != 0 && hasFilters) {
-                error << "Process PID cannot be combined with list filters\n";
-                return 2;
+                return fail("process", "validate",
+                            {ErrorCode::InvalidArgument,
+                             "Process PID cannot be combined with list filters",
+                             0, "cli", "validate"});
             }
             if (processPidOption->count() == 0) {
                 if (rawCommand) {
-                    error << "--raw-command requires a process PID\n";
-                    return 2;
+                    return fail("process", "validate",
+                                {ErrorCode::InvalidArgument,
+                                 "--raw-command requires a process PID", 0,
+                                 "cli", "validate"});
                 }
                 ProcessQuery query;
                 if (processNameOption->count() != 0) query.name = processNameFilter;
@@ -720,16 +741,14 @@ int CliApp::run(
                 }
                 const auto result = processService_.list(std::move(query));
                 if (!result) {
-                    error << result.error().message << '\n';
-                    return exitCode(result.error().code);
+                    return fail("process", "list", result.error());
                 }
                 if (jsonOutput) output << JsonSerializer::processes(result.value()) << '\n';
                 else printProcesses(result.value(), output, error);
             } else {
                 const auto result = processService_.inspect(processPid);
                 if (!result) {
-                    error << result.error().message << '\n';
-                    return exitCode(result.error().code);
+                    return fail("process", "inspect", result.error());
                 }
                 if (jsonOutput) {
                     output << JsonSerializer::process(result.value(), rawCommand) << '\n';
@@ -739,16 +758,14 @@ int CliApp::run(
             if (serviceUnitOption->count() == 0) {
                 const auto result = serviceService_.list();
                 if (!result) {
-                    error << result.error().message << '\n';
-                    return exitCode(result.error().code);
+                    return fail("service", "list", result.error());
                 }
                 if (jsonOutput) output << JsonSerializer::services(result.value()) << '\n';
                 else printServices(result.value(), output, error);
             } else if (serviceAction.empty()) {
                 const auto result = serviceService_.inspect(serviceUnit);
                 if (!result) {
-                    error << result.error().message << '\n';
-                    return exitCode(result.error().code);
+                    return fail("service", "inspect", result.error());
                 }
                 if (jsonOutput) output << JsonSerializer::service(result.value()) << '\n';
                 else printService(result.value(), output, error);
@@ -770,8 +787,7 @@ int CliApp::run(
                                           ? serviceService_.stop(serviceUnit)
                                           : serviceService_.restart(serviceUnit);
                 if (!result) {
-                    error << result.error().message << '\n';
-                    return exitCode(result.error().code);
+                    return fail("service", serviceAction, result.error());
                 }
                 output << fmt::format("{} submitted for {}\n",
                                       serviceAction, serviceUnit);
@@ -784,17 +800,18 @@ int CliApp::run(
             if (logSinceOption->count() != 0) {
                 auto since = application::LogService::parseSince(logSince);
                 if (!since) {
-                    error << since.error().message << '\n';
-                    return exitCode(since.error().code);
+                    return fail("log", "read", since.error());
                 }
                 query.since = since.value();
             }
             if (followLog) {
                 InterruptGuard interrupt;
                 if (!interrupt.install()) {
-                    error << "Unable to install SIGINT handler: "
-                          << std::strerror(errno) << '\n';
-                    return 5;
+                    return fail("log", "follow",
+                                {ErrorCode::OperationFailed,
+                                 "Unable to install SIGINT handler: " +
+                                     std::string{std::strerror(errno)},
+                                 errno, "cli", "install SIGINT handler"});
                 }
                 const auto result = logService_.follow(
                     std::move(query),
@@ -811,14 +828,12 @@ int CliApp::run(
                     if (result.error().code == ErrorCode::Interrupted) {
                         return 130;
                     }
-                    error << result.error().message << '\n';
-                    return exitCode(result.error().code);
+                    return fail("log", "follow", result.error());
                 }
             } else {
                 const auto result = logService_.read(std::move(query));
                 if (!result) {
-                    error << result.error().message << '\n';
-                    return exitCode(result.error().code);
+                    return fail("log", "read", result.error());
                 }
                 if (jsonOutput) output << JsonSerializer::logs(result.value()) << '\n';
                 else printJournalEntries(result.value(), output, error);
@@ -827,8 +842,7 @@ int CliApp::run(
             auto plan = portService_.prepareRelease(
                 static_cast<std::uint16_t>(freePortNumber));
             if (!plan) {
-                error << plan.error().message << '\n';
-                return exitCode(plan.error().code);
+                return fail("port", "free", plan.error());
             }
             printReleasePlan(plan.value().value, output);
             if (plan.value().value.recommendedUnit) {
@@ -843,8 +857,7 @@ int CliApp::run(
                 auto stopped = portService_.stopManagedService(
                     plan.value().value);
                 if (!stopped) {
-                    error << stopped.error().message << '\n';
-                    return exitCode(stopped.error().code);
+                    return fail("port", "free", stopped.error());
                 }
                 for (const auto& warning : stopped.value().warnings) {
                     error << "Warning: " << warning.message << '\n';
@@ -862,8 +875,7 @@ int CliApp::run(
 
             auto terminated = portService_.terminate(plan.value().value);
             if (!terminated) {
-                error << terminated.error().message << '\n';
-                return exitCode(terminated.error().code);
+                return fail("port", "free", terminated.error());
             }
             for (const auto& warning : terminated.value().warnings) {
                 error << "Warning: " << warning.message << '\n';
@@ -884,8 +896,7 @@ int CliApp::run(
             auto forced = portService_.force(
                 *terminated.value().value.remaining);
             if (!forced) {
-                error << forced.error().message << '\n';
-                return exitCode(forced.error().code);
+                return fail("port", "free", forced.error());
             }
             for (const auto& warning : forced.value().warnings) {
                 error << "Warning: " << warning.message << '\n';
@@ -896,8 +907,14 @@ int CliApp::run(
             SocketQuery query;
             if (portOption->count() != 0) query.localPort = static_cast<std::uint16_t>(portNumber);
             const auto result = portService_.inspect(query);
-            if (!result) { error << result.error().message << '\n'; return exitCode(result.error().code); }
-            if (result.value().value.empty() && query.localPort) { error << "No socket found for port " << portNumber << '\n'; return 3; }
+            if (!result) return fail("port", query.localPort ? "inspect" : "list", result.error());
+            if (result.value().value.empty() && query.localPort) {
+                return fail("port", "inspect",
+                            {ErrorCode::NotFound,
+                             "No socket found for port " +
+                                 std::to_string(portNumber),
+                             0, "cli", "inspect"});
+            }
             if (jsonOutput) {
                 output << JsonSerializer::ports(
                               result.value(), query.localPort ? "inspect" : "list")
@@ -918,6 +935,12 @@ int CliApp::run(
         }
         return 0;
     } catch (const CLI::ParseError& parseError) {
+        if (parseError.get_exit_code() != 0 && jsonOutput) {
+            const Error failure{ErrorCode::InvalidArgument, parseError.what(),
+                                0, "cli", "parse"};
+            output << JsonSerializer::error("cli", "parse", failure) << '\n';
+            return 2;
+        }
         const auto cliExitCode = app.exit(parseError, output, error);
         return cliExitCode == 0 ? 0 : 2;
     }
