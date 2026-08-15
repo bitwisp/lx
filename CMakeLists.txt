@@ -13,6 +13,7 @@ option(LX_BUILD_BENCHMARKS "Build LX benchmarks" OFF)
 option(LX_ENABLE_ASAN "Enable AddressSanitizer" OFF)
 option(LX_ENABLE_UBSAN "Enable UndefinedBehaviorSanitizer" OFF)
 option(LX_ENABLE_LTO "Enable link-time optimization" OFF)
+option(LX_ENABLE_SYSTEMD "Enable the systemd sd-bus backend when available" ON)
 option(LX_WARNINGS_AS_ERRORS "Treat LX source warnings as errors" OFF)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -31,6 +32,39 @@ set(
     "LX display version"
 )
 lx_add_runtime_dependencies()
+
+set(LX_HAS_SYSTEMD OFF)
+if(LX_ENABLE_SYSTEMD)
+    find_package(PkgConfig QUIET)
+    if(PkgConfig_FOUND)
+        pkg_check_modules(LIBSYSTEMD QUIET IMPORTED_TARGET libsystemd)
+    endif()
+
+    if(TARGET PkgConfig::LIBSYSTEMD)
+        set(LX_SYSTEMD_TARGET PkgConfig::LIBSYSTEMD)
+        set(LX_HAS_SYSTEMD ON)
+    else()
+        find_path(LX_SYSTEMD_INCLUDE_DIR systemd/sd-bus.h)
+        find_library(LX_SYSTEMD_LIBRARY NAMES systemd)
+        if(LX_SYSTEMD_INCLUDE_DIR AND LX_SYSTEMD_LIBRARY)
+            add_library(lx_systemd_dependency UNKNOWN IMPORTED)
+            set_target_properties(
+                lx_systemd_dependency
+                PROPERTIES
+                    IMPORTED_LOCATION "${LX_SYSTEMD_LIBRARY}"
+                    INTERFACE_INCLUDE_DIRECTORIES "${LX_SYSTEMD_INCLUDE_DIR}"
+            )
+            set(LX_SYSTEMD_TARGET lx_systemd_dependency)
+            set(LX_HAS_SYSTEMD ON)
+        endif()
+    endif()
+endif()
+
+if(LX_HAS_SYSTEMD)
+    message(STATUS "systemd sd-bus backend: enabled")
+else()
+    message(STATUS "systemd sd-bus backend: unavailable")
+endif()
 
 add_library(lx_core INTERFACE)
 add_library(lx::core ALIAS lx_core)
@@ -69,6 +103,12 @@ add_library(lx_linux STATIC
 )
 add_library(lx::linux ALIAS lx_linux)
 target_link_libraries(lx_linux PUBLIC lx::core PRIVATE lx_warnings)
+if(LX_HAS_SYSTEMD)
+    target_link_libraries(lx_linux PRIVATE ${LX_SYSTEMD_TARGET})
+    target_compile_definitions(lx_linux PUBLIC LX_HAS_SYSTEMD=1)
+else()
+    target_compile_definitions(lx_linux PUBLIC LX_HAS_SYSTEMD=0)
+endif()
 lx_enable_sanitizers(lx_linux)
 
 add_library(
