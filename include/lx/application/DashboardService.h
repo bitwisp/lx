@@ -2,6 +2,7 @@
 
 #include "lx/application/MetricsService.h"
 #include "lx/domain/DashboardSnapshot.h"
+#include "lx/contracts/IDashboardProvider.h"
 
 #include <chrono>
 #include <optional>
@@ -12,16 +13,16 @@ class PortService;
 class ProcessService;
 class ServiceService;
 
-class DashboardService final {
+class DashboardService final : public contracts::IDashboardProvider {
 public:
     DashboardService(const MetricsService& metrics,
                      const ProcessService& processes,
                      const PortService& ports,
                      const ServiceService& services);
 
-    [[nodiscard]] DashboardSnapshot refresh(
-        std::chrono::steady_clock::time_point now =
-            std::chrono::steady_clock::now());
+    [[nodiscard]] DashboardSnapshot refresh() override;
+    [[nodiscard]] DashboardSnapshot refreshAt(
+        std::chrono::steady_clock::time_point now);
 
 private:
     const MetricsService& metrics_;

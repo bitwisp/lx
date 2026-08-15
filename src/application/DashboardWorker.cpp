@@ -5,7 +5,10 @@
 
 namespace lx::application {
 
-DashboardWorker::DashboardWorker(DashboardService& service) : service_(service) {}
+DashboardWorker::DashboardWorker(contracts::IDashboardProvider& service)
+    : service_(service)
+{
+}
 
 DashboardWorker::~DashboardWorker()
 {

@@ -35,7 +35,12 @@ DashboardService::DashboardService(const MetricsService& metrics,
 {
 }
 
-DashboardSnapshot DashboardService::refresh(
+DashboardSnapshot DashboardService::refresh()
+{
+    return refreshAt(std::chrono::steady_clock::now());
+}
+
+DashboardSnapshot DashboardService::refreshAt(
     const std::chrono::steady_clock::time_point now)
 {
     DashboardSnapshot next = previous_.value_or(DashboardSnapshot{});

@@ -1,6 +1,7 @@
 #include "lx/tui/FtxuiTuiRunner.h"
 
 #include "lx/application/DashboardWorker.h"
+#include "lx/application/DashboardService.h"
 #include "lx/application/FindService.h"
 #include "lx/application/InspectService.h"
 #include "lx/application/LogService.h"

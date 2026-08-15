@@ -1,6 +1,6 @@
 #pragma once
 
-#include "lx/application/DashboardService.h"
+#include "lx/contracts/IDashboardProvider.h"
 
 #include <condition_variable>
 #include <functional>
@@ -14,7 +14,7 @@ class DashboardWorker final {
 public:
     using Refreshed = std::function<void()>;
 
-    explicit DashboardWorker(DashboardService& service);
+    explicit DashboardWorker(contracts::IDashboardProvider& service);
     ~DashboardWorker();
     DashboardWorker(const DashboardWorker&) = delete;
     DashboardWorker& operator=(const DashboardWorker&) = delete;
@@ -26,7 +26,7 @@ public:
 private:
     void work(Refreshed refreshed) noexcept;
 
-    DashboardService& service_;
+    contracts::IDashboardProvider& service_;
     mutable std::mutex mutex_;
     std::condition_variable wake_;
     std::shared_ptr<const DashboardSnapshot> snapshot_;

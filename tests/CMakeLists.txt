@@ -4,6 +4,7 @@ add_executable(
     integration/resource/resource_services_test.cpp
     integration/socket/socket_ownership_test.cpp
     unit/application/doctor_service_test.cpp
+    unit/application/dashboard_worker_test.cpp
     unit/application/find_service_test.cpp
     unit/application/journal_provider_contract_test.cpp
     unit/application/inspect_service_test.cpp
