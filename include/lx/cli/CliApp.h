@@ -9,6 +9,7 @@ class PortService;
 class ServiceService;
 class LogService;
 class InspectService;
+class FindService;
 }
 
 namespace lx::cli {
@@ -20,7 +21,8 @@ public:
            const application::PortService& portService,
            const application::ServiceService& serviceService,
            const application::LogService& logService,
-           const application::InspectService& inspectService) noexcept;
+           const application::InspectService& inspectService,
+           const application::FindService& findService) noexcept;
 
     int run(int argc, char** argv, std::istream& input,
             std::ostream& output, std::ostream& error) const;
@@ -32,6 +34,7 @@ private:
     const application::ServiceService& serviceService_;
     const application::LogService& logService_;
     const application::InspectService& inspectService_;
+    const application::FindService& findService_;
 };
 
 } // namespace lx::cli

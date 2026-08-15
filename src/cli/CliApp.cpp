@@ -7,6 +7,7 @@
 #include "lx/application/ServiceService.h"
 #include "lx/application/LogService.h"
 #include "lx/application/InspectService.h"
+#include "lx/application/FindService.h"
 
 #include <CLI/CLI.hpp>
 #include <fmt/format.h>
@@ -475,6 +476,41 @@ void printResourceGraph(const ResourceGraph& graph, std::ostream& output,
     }
 }
 
+void printFindResult(const FindResult& result, std::ostream& output,
+                     std::ostream& error)
+{
+    if (!result.services.empty()) {
+        output << "SERVICES\n";
+        for (const auto& service : result.services) {
+            output << "  " << service.unitName << '\n';
+        }
+    }
+    if (!result.processes.empty()) {
+        output << "\nPROCESSES\n";
+        for (const auto& process : result.processes) {
+            output << fmt::format("  {:<8} {}\n", process.pid, process.name);
+        }
+    }
+    if (!result.ports.empty()) {
+        output << "\nPORTS\n";
+        for (const auto& port : result.ports) {
+            output << fmt::format(
+                "  {} {}:{}\n",
+                port.socket.protocol == TransportProtocol::Tcp ? "TCP" : "UDP",
+                port.socket.local.address, port.socket.local.port);
+        }
+    }
+    if (!result.executables.empty()) {
+        output << "\nEXECUTABLES\n";
+        for (const auto& executable : result.executables) {
+            output << "  " << executable << '\n';
+        }
+    }
+    for (const auto& warning : result.warnings) {
+        error << "Warning: " << warning.message << '\n';
+    }
+}
+
 int exitCode(const ErrorCode code)
 {
     switch (code) {
@@ -496,10 +532,12 @@ CliApp::CliApp(const application::DoctorService& doctorService,
                const application::PortService& portService,
                const application::ServiceService& serviceService,
                const application::LogService& logService,
-               const application::InspectService& inspectService) noexcept
+               const application::InspectService& inspectService,
+               const application::FindService& findService) noexcept
     : doctorService_(doctorService), processService_(processService),
       portService_(portService), serviceService_(serviceService),
-      logService_(logService), inspectService_(inspectService)
+      logService_(logService), inspectService_(inspectService),
+      findService_(findService)
 {
 }
 
@@ -584,6 +622,9 @@ int CliApp::run(
     std::string inspectExpression;
     inspect->add_option("resource", inspectExpression, "Resource expression")
         ->required();
+    auto* find = app.add_subcommand("find", "Search observable resources");
+    std::string findQuery;
+    find->add_option("query", findQuery, "Search query")->required();
 
     try {
         app.parse(argc, argv);
@@ -596,6 +637,13 @@ int CliApp::run(
                 return exitCode(result.error().code);
             }
             printResourceGraph(result.value(), output, error);
+        } else if (*find) {
+            const auto result = findService_.find(findQuery);
+            if (!result) {
+                error << result.error().message << '\n';
+                return exitCode(result.error().code);
+            }
+            printFindResult(result.value(), output, error);
         } else if (*stopProcess) {
             const auto result = processService_.stop(stopPid);
             if (!result) {

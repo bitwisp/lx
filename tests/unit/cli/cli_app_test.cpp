@@ -6,6 +6,7 @@
 #include "lx/application/LogService.h"
 #include "lx/application/InspectService.h"
 #include "lx/application/ResourceResolver.h"
+#include "lx/application/FindService.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -243,9 +244,12 @@ CliResult runCli(std::vector<std::string> arguments,
         portService, processService, serviceService};
     const lx::application::InspectService inspectService{
         resolver, portService, processService, serviceService, logService};
+    const lx::application::FindService findService{
+        portService, processService, serviceService};
     const auto exitCode = lx::cli::CliApp{doctorService, processService,
                                          portService, serviceService,
-                                         logService, inspectService}.run(
+                                         logService, inspectService,
+                                         findService}.run(
         static_cast<int>(argv.size()), argv.data(), input, output, error);
     return {exitCode, output.str(), error.str()};
 }
@@ -268,6 +272,18 @@ TEST_CASE("CLI inspects typed resources and reports ambiguity")
     const auto ambiguous = runCli({"lx", "inspect", "8080"});
     REQUIRE(ambiguous.exitCode == 7);
     CHECK(ambiguous.error.find("port:8080") != std::string::npos);
+}
+
+TEST_CASE("CLI finds related observable resources")
+{
+    const auto result = runCli({"lx", "find", "demo"});
+    REQUIRE(result.exitCode == 0);
+    CHECK(result.output.find("SERVICES") != std::string::npos);
+    CHECK(result.output.find("PROCESSES") != std::string::npos);
+    CHECK(result.output.find("PORTS") != std::string::npos);
+
+    const auto missing = runCli({"lx", "find", "does-not-exist"});
+    CHECK(missing.exitCode == 3);
 }
 
 TEST_CASE("CLI validates port range") { REQUIRE(runCli({"lx","port","0"}).exitCode==2); REQUIRE(runCli({"lx","port","65536"}).exitCode==2); }
