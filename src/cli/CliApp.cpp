@@ -14,6 +14,9 @@
 #include <istream>
 #include <algorithm>
 #include <cctype>
+#include <cerrno>
+#include <csignal>
+#include <cstring>
 #include <limits>
 #include <ctime>
 #include <iomanip>
@@ -22,6 +25,44 @@
 namespace lx::cli {
 
 namespace {
+
+class InterruptGuard final {
+public:
+    InterruptGuard() noexcept = default;
+    ~InterruptGuard()
+    {
+        if (installed_) sigaction(SIGINT, &previous_, nullptr);
+    }
+
+    InterruptGuard(const InterruptGuard&) = delete;
+    InterruptGuard& operator=(const InterruptGuard&) = delete;
+
+    bool install() noexcept
+    {
+        requested_ = 0;
+        struct sigaction action {};
+        action.sa_handler = &InterruptGuard::handle;
+        sigemptyset(&action.sa_mask);
+        action.sa_flags = 0;
+        if (sigaction(SIGINT, &action, &previous_) != 0) return false;
+        installed_ = true;
+        return true;
+    }
+
+    [[nodiscard]] bool requested() const noexcept
+    {
+        return requested_ != 0;
+    }
+
+private:
+    static void handle(int) noexcept { requested_ = 1; }
+
+    static volatile std::sig_atomic_t requested_;
+    struct sigaction previous_ {};
+    bool installed_ = false;
+};
+
+volatile std::sig_atomic_t InterruptGuard::requested_ = 0;
 
 std::string_view statusText(const CapabilityStatus status)
 {
@@ -451,6 +492,9 @@ int CliApp::run(
     auto* logSinceOption = log->add_option(
         "--since", logSince,
         "Start time: YYYY-MM-DD HH:MM:SS, 30s, 10m, 2h, or 3d");
+    bool followLog = false;
+    log->add_flag("--follow", followLog,
+                  "Show recent entries and follow new journal entries");
 
     try {
         app.parse(argc, argv);
@@ -553,12 +597,37 @@ int CliApp::run(
                 }
                 query.since = since.value();
             }
-            const auto result = logService_.read(std::move(query));
-            if (!result) {
-                error << result.error().message << '\n';
-                return exitCode(result.error().code);
+            if (followLog) {
+                InterruptGuard interrupt;
+                if (!interrupt.install()) {
+                    error << "Unable to install SIGINT handler: "
+                          << std::strerror(errno) << '\n';
+                    return 5;
+                }
+                const auto result = logService_.follow(
+                    std::move(query),
+                    [&output, &error](
+                        const Observation<JournalEntry>& entry) {
+                        printJournalEntry(entry, output, error);
+                        output.flush();
+                        return Result<void>::success();
+                    },
+                    [&interrupt] { return interrupt.requested(); });
+                if (!result) {
+                    if (result.error().code == ErrorCode::Interrupted) {
+                        return 130;
+                    }
+                    error << result.error().message << '\n';
+                    return exitCode(result.error().code);
+                }
+            } else {
+                const auto result = logService_.read(std::move(query));
+                if (!result) {
+                    error << result.error().message << '\n';
+                    return exitCode(result.error().code);
+                }
+                printJournalEntries(result.value(), output, error);
             }
-            printJournalEntries(result.value(), output, error);
         } else if (*freePort) {
             auto plan = portService_.prepareRelease(
                 static_cast<std::uint16_t>(freePortNumber));

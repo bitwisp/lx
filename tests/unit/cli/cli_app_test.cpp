@@ -8,6 +8,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <sstream>
+#include <csignal>
 #include <string>
 #include <utility>
 #include <vector>
@@ -169,11 +170,22 @@ public:
     }
 
     lx::Result<void> follow(
-        const lx::LogQuery&, const lx::contracts::JournalEntrySink&,
-        const lx::contracts::JournalStopRequested&) const override
+        const lx::LogQuery& query, const lx::contracts::JournalEntrySink& sink,
+        const lx::contracts::JournalStopRequested& stopRequested) const override
     {
-        return lx::Result<void>::failure(
-            {lx::ErrorCode::Unsupported, "not used", 0, "fake", "follow"});
+        lastQuery = query;
+        lx::JournalEntry entry;
+        entry.systemdUnit = query.unit;
+        entry.message = "followed";
+        auto accepted = sink({std::move(entry), {}});
+        if (!accepted) return accepted;
+        std::raise(SIGINT);
+        if (stopRequested()) {
+            return lx::Result<void>::failure(
+                {lx::ErrorCode::Interrupted, "interrupted", 0, "fake",
+                 "follow"});
+        }
+        return lx::Result<void>::success();
     }
 
     mutable lx::LogQuery lastQuery;
@@ -285,6 +297,14 @@ TEST_CASE("CLI validates journal query arguments")
     REQUIRE(runCli({"lx", "log", "demo", "--lines", "0"}).exitCode == 2);
     REQUIRE(runCli({"lx", "log", "demo", "--since", "last week"})
                 .exitCode == 2);
+}
+
+TEST_CASE("CLI follows journal entries until SIGINT")
+{
+    const auto result = runCli({"lx", "log", "demo", "--follow"});
+    REQUIRE(result.exitCode == 130);
+    REQUIRE(result.output.find("followed") != std::string::npos);
+    REQUIRE(result.error.empty());
 }
 
 TEST_CASE("CLI confirms graceful and forced port release")
