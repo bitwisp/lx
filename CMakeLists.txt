@@ -67,6 +67,7 @@ add_library(
     lx_application STATIC
     src/application/DoctorService.cpp
     src/application/ProcessService.cpp
+    src/application/PortService.cpp
 )
 add_library(lx::application ALIAS lx_application)
 target_link_libraries(lx_application PUBLIC lx::core PRIVATE lx_warnings)
