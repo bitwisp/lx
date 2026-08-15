@@ -47,6 +47,22 @@
       "cacheVariables": {
         "LX_ENABLE_UBSAN": "ON"
       }
+    },
+    {
+      "name": "tui-debug",
+      "displayName": "Debug with TUI",
+      "inherits": "debug",
+      "cacheVariables": {
+        "LX_BUILD_TUI": "ON"
+      }
+    },
+    {
+      "name": "tui-release",
+      "displayName": "Release with TUI",
+      "inherits": "release",
+      "cacheVariables": {
+        "LX_BUILD_TUI": "ON"
+      }
     }
   ],
   "buildPresets": [
@@ -54,6 +70,8 @@
     { "name": "release", "configurePreset": "release" },
     { "name": "asan", "configurePreset": "asan" },
     { "name": "ubsan", "configurePreset": "ubsan" }
+    ,{ "name": "tui-debug", "configurePreset": "tui-debug" }
+    ,{ "name": "tui-release", "configurePreset": "tui-release" }
   ],
   "testPresets": [
     {
@@ -75,7 +93,16 @@
       "name": "ubsan",
       "configurePreset": "ubsan",
       "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "tui-debug",
+      "configurePreset": "tui-debug",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "tui-release",
+      "configurePreset": "tui-release",
+      "output": { "outputOnFailure": true }
     }
   ]
 }
-

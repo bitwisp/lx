@@ -32,6 +32,9 @@ set(
     "LX display version"
 )
 lx_add_runtime_dependencies()
+if(LX_BUILD_TUI)
+    lx_add_tui_dependencies()
+endif()
 
 set(LX_HAS_SYSTEMD OFF)
 if(LX_ENABLE_SYSTEMD)

@@ -32,6 +32,20 @@ function(lx_add_runtime_dependencies)
     FetchContent_MakeAvailable(CLI11 fmt nlohmann_json)
 endfunction()
 
+function(lx_add_tui_dependencies)
+    set(FTXUI_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+    set(FTXUI_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set(FTXUI_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+    set(FTXUI_ENABLE_INSTALL OFF CACHE BOOL "" FORCE)
+    FetchContent_Declare(
+        FTXUI
+        GIT_REPOSITORY https://github.com/ArthurSonzogni/FTXUI.git
+        GIT_TAG v7.0.1
+        GIT_SHALLOW TRUE
+    )
+    FetchContent_MakeAvailable(FTXUI)
+endfunction()
+
 function(lx_add_test_dependencies)
     set(CATCH_INSTALL_DOCS OFF CACHE BOOL "" FORCE)
     set(CATCH_INSTALL_EXTRAS OFF CACHE BOOL "" FORCE)
