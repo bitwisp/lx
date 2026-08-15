@@ -127,6 +127,7 @@ lx_enable_sanitizers(lx_linux)
 add_library(
     lx_application STATIC
     src/application/DoctorService.cpp
+    src/application/FindService.cpp
     src/application/LogService.cpp
     src/application/InspectService.cpp
     src/application/ProcessService.cpp
