@@ -49,6 +49,22 @@ public:
     }
 };
 
+class FakeSignalProvider final : public lx::contracts::ISignalProvider {
+public:
+    lx::Result<lx::SignalDelivery> send(
+        const pid_t pid, const lx::ProcessSignal signal) const override
+    {
+        return lx::Result<lx::SignalDelivery>::success(
+            {pid, signal, lx::SignalMechanism::PidFd});
+    }
+    lx::Result<bool> waitForExit(
+        const pid_t, const std::chrono::milliseconds) const override
+    {
+        return lx::Result<bool>::success(true);
+    }
+    lx::SignalCapabilities capabilities() const override { return {true, true}; }
+};
+
 struct CliResult {
     int exitCode;
     std::string output;
@@ -66,7 +82,9 @@ CliResult runCli(std::vector<std::string> arguments)
     std::ostringstream output;
     std::ostringstream error;
     const FakeProcessProvider provider;
-    const lx::application::ProcessService processService{provider};
+    const FakeSignalProvider signalProvider;
+    const lx::application::ProcessService processService{
+        provider, signalProvider, 999};
     const FakeSocketProvider socketProvider;
     const FakeSocketOwnerResolver socketOwnerResolver;
     const lx::application::DoctorService doctorService{provider, socketProvider};
