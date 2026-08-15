@@ -91,7 +91,7 @@ CliResult runCli(std::vector<std::string> arguments,
     const FakeSocketOwnerResolver socketOwnerResolver;
     const lx::application::DoctorService doctorService{provider, socketProvider};
     const lx::application::PortService portService{
-        socketProvider, socketOwnerResolver, provider};
+        socketProvider, socketOwnerResolver, processService};
     const auto exitCode = lx::cli::CliApp{doctorService, processService, portService}.run(
         static_cast<int>(argv.size()), argv.data(), input, output, error);
     return {exitCode, output.str(), error.str()};

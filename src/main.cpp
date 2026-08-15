@@ -19,7 +19,7 @@ int main(const int argc, char** argv)
     const lx::linux::netlink::NetlinkSocketProvider socketProvider;
     const lx::linux::procfs::SocketInodeResolver socketOwnerResolver;
     const lx::application::PortService portService{
-        socketProvider, socketOwnerResolver, processProvider};
+        socketProvider, socketOwnerResolver, processService};
     const lx::application::DoctorService doctorService{processProvider, socketProvider};
     return lx::cli::CliApp{doctorService, processService, portService}.run(
         argc, argv, std::cin, std::cout, std::cerr);

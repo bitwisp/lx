@@ -1,5 +1,7 @@
 #include "lx/application/PortService.h"
+#include "lx/application/ProcessService.h"
 #include "lx/linux/netlink/NetlinkSocketProvider.h"
+#include "lx/linux/process/LinuxSignalProvider.h"
 #include "lx/linux/procfs/ProcFsProcessProvider.h"
 #include "lx/linux/procfs/SocketInodeResolver.h"
 
@@ -50,7 +52,11 @@ TEST_CASE("port inspection maps a live TCP listener to the test process")
     const lx::linux::netlink::NetlinkSocketProvider sockets;
     const lx::linux::procfs::SocketInodeResolver owners;
     const lx::linux::procfs::ProcFsProcessProvider processes;
-    const lx::application::PortService service{sockets, owners, processes};
+    const lx::linux::process::LinuxSignalProvider signals;
+    const lx::application::ProcessService processService{
+        processes, signals, ::getpid()};
+    const lx::application::PortService service{
+        sockets, owners, processService};
     lx::SocketQuery query;
     query.localPort = ntohs(address.sin_port);
     query.protocol = lx::TransportProtocol::Tcp;
