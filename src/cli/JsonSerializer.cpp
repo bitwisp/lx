@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <type_traits>
 
 namespace lx::cli {
 namespace {
@@ -174,6 +175,58 @@ Json journalValue(const JournalEntry& entry)
             {"priority", entry.priority ? Json(*entry.priority) : Json(nullptr)}};
 }
 
+Json portValues(const std::vector<PortInfo>& source)
+{
+    Json values = Json::array();
+    for (const auto& value : source) values.push_back(portValue(value));
+    return values;
+}
+
+Json processValues(const std::vector<ProcessInfo>& source)
+{
+    Json values = Json::array();
+    for (const auto& value : source) values.push_back(processValue(value, false));
+    return values;
+}
+
+Json serviceValues(const std::vector<ServiceInfo>& source)
+{
+    Json values = Json::array();
+    for (const auto& value : source) values.push_back(serviceValue(value));
+    return values;
+}
+
+Json journalValues(const std::vector<JournalEntry>& source)
+{
+    Json values = Json::array();
+    for (const auto& value : source) values.push_back(journalValue(value));
+    return values;
+}
+
+Json resourceTargetValue(const ResourceTarget& target)
+{
+    return std::visit([](const auto& value) -> Json {
+        using Target = std::decay_t<decltype(value)>;
+        if constexpr (std::is_same<Target, PortTarget>::value) {
+            return {{"type", "port"}, {"value", value.port}};
+        } else if constexpr (std::is_same<Target, ProcessTarget>::value) {
+            return {{"type", "pid"}, {"value", value.pid}};
+        } else {
+            return {{"type", "service"}, {"value", value.unit}};
+        }
+    }, target);
+}
+
+const char* capabilityName(const CapabilityStatus status)
+{
+    switch (status) {
+    case CapabilityStatus::Available: return "available";
+    case CapabilityStatus::Unavailable: return "unavailable";
+    case CapabilityStatus::NotImplemented: return "not_implemented";
+    }
+    return "not_implemented";
+}
+
 Json envelope(const std::string& command, const std::string& operation,
               Json data, const std::vector<Warning>& warnings)
 {
@@ -264,6 +317,37 @@ std::string JsonSerializer::logEvent(const Observation<JournalEntry>& value)
 {
     return envelope("log", "follow", {{"entry", journalValue(value.value)}},
                     value.warnings).dump();
+}
+
+std::string JsonSerializer::doctor(const DoctorReport& value)
+{
+    Json checks = Json::array();
+    for (const auto& check : value.checks) {
+        checks.push_back({{"name", check.name},
+                          {"status", capabilityName(check.status)},
+                          {"detail", check.detail}});
+    }
+    return envelope("doctor", "inspect", {{"checks", checks}}, {}).dump();
+}
+
+std::string JsonSerializer::inspect(const ResourceGraph& value)
+{
+    Json data{{"root", resourceTargetValue(value.root)},
+              {"ports", portValues(value.ports)},
+              {"processes", processValues(value.processes)},
+              {"services", serviceValues(value.services)},
+              {"recent_logs", journalValues(value.recentLogs)}};
+    return envelope("inspect", "inspect", std::move(data),
+                    value.warnings).dump();
+}
+
+std::string JsonSerializer::find(const FindResult& value)
+{
+    Json data{{"services", serviceValues(value.services)},
+              {"processes", processValues(value.processes)},
+              {"ports", portValues(value.ports)},
+              {"executables", value.executables}};
+    return envelope("find", "search", std::move(data), value.warnings).dump();
 }
 
 } // namespace lx::cli

@@ -7,6 +7,9 @@
 #include "lx/domain/PortInfo.h"
 #include "lx/domain/ServiceInfo.h"
 #include "lx/domain/JournalEntry.h"
+#include "lx/domain/DoctorReport.h"
+#include "lx/domain/FindResult.h"
+#include "lx/domain/ResourceGraph.h"
 
 #include <string>
 #include <vector>
@@ -38,6 +41,9 @@ public:
         const Observation<std::vector<JournalEntry>>& value);
     [[nodiscard]] static std::string logEvent(
         const Observation<JournalEntry>& value);
+    [[nodiscard]] static std::string doctor(const DoctorReport& value);
+    [[nodiscard]] static std::string inspect(const ResourceGraph& value);
+    [[nodiscard]] static std::string find(const FindResult& value);
 };
 
 } // namespace lx::cli

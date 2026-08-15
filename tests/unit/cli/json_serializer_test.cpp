@@ -89,3 +89,27 @@ TEST_CASE("JSON serializer emits finite logs and NDJSON event documents")
     CHECK(event.at("operation") == "follow");
     CHECK(event.at("data").at("entry").at("pid") == 42);
 }
+
+TEST_CASE("JSON serializer emits inspect find and doctor envelopes")
+{
+    lx::ResourceGraph graph;
+    graph.root = lx::PortTarget{8080};
+    const auto inspected = nlohmann::json::parse(
+        lx::cli::JsonSerializer::inspect(graph));
+    CHECK(inspected.at("data").at("root").at("type") == "port");
+    CHECK(inspected.at("data").at("root").at("value") == 8080);
+    CHECK(inspected.at("data").at("recent_logs").is_array());
+
+    lx::FindResult found;
+    found.executables = {"/usr/bin/demo"};
+    const auto searched = nlohmann::json::parse(
+        lx::cli::JsonSerializer::find(found));
+    CHECK(searched.at("operation") == "search");
+    CHECK(searched.at("data").at("executables").at(0) == "/usr/bin/demo");
+
+    lx::DoctorReport report{{{"Process API", lx::CapabilityStatus::Available,
+                              "ready"}}};
+    const auto doctor = nlohmann::json::parse(
+        lx::cli::JsonSerializer::doctor(report));
+    CHECK(doctor.at("data").at("checks").at(0).at("status") == "available");
+}
