@@ -7,6 +7,7 @@
 #include <chrono>
 #include <csignal>
 #include <string>
+#include <sys/wait.h>
 #include <system_error>
 #include <thread>
 #include <unistd.h>
@@ -44,6 +45,12 @@ Result<SignalDelivery> sendWithKill(
 
 Result<bool> exitedWithKill(const pid_t pid)
 {
+    siginfo_t information{};
+    if (::waitid(P_PID, static_cast<id_t>(pid), &information,
+                 WEXITED | WNOHANG | WNOWAIT) == 0 &&
+        information.si_pid == pid) {
+        return Result<bool>::success(true);
+    }
     if (::kill(pid, 0) == 0 || errno == EPERM) {
         return Result<bool>::success(false);
     }
