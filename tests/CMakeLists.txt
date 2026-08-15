@@ -4,6 +4,7 @@ add_executable(
     unit/application/process_service_test.cpp
     unit/cli/cli_app_test.cpp
     unit/domain/observation_test.cpp
+    unit/domain/port_info_test.cpp
     unit/domain/result_test.cpp
     unit/domain/socket_info_test.cpp
     unit/procfs/cmdline_parser_test.cpp
