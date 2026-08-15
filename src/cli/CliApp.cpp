@@ -215,6 +215,8 @@ std::string processName(const PortReleasePlan& plan, const pid_t pid)
     return "<unavailable>";
 }
 
+std::string shortened(const std::string& value, std::size_t width);
+
 void printReleasePlan(const PortReleasePlan& plan, std::ostream& output)
 {
     output << fmt::format("Port {} is owned by:\n\n", plan.localPort);
@@ -250,6 +252,24 @@ void printProcess(const Observation<ProcessInfo>& observed, const bool raw,
     if (!observed.warnings.empty()) {
         output << "\nWarnings\n";
         for (const auto& warning : observed.warnings) output << "  " << warning.message << '\n';
+    }
+}
+
+void printProcesses(const Observation<std::vector<ProcessInfo>>& observed,
+                    std::ostream& output, std::ostream& error)
+{
+    output << "PID      USER             STATE          RSS MiB   THREADS  NAME                     SERVICE\n";
+    for (const auto& process : observed.value) {
+        output << fmt::format(
+            "{:<8} {:<16} {:<14} {:>9.1f} {:>8}  {:<24} {}\n",
+            process.pid, shortened(process.user, 16),
+            shortened(process.state, 14),
+            static_cast<double>(process.rssBytes) / (1024.0 * 1024.0),
+            process.threads, shortened(process.name, 24),
+            process.systemdUnit.value_or("-"));
+    }
+    for (const auto& warning : observed.warnings) {
+        error << "Warning: " << warning.message << '\n';
     }
 }
 
@@ -441,10 +461,19 @@ int CliApp::run(
     auto* process = app.add_subcommand("process", "Inspect a process");
     pid_t processPid = -1;
     bool rawCommand = false;
+    std::string processNameFilter;
+    std::string processUserFilter;
+    std::string processServiceFilter;
     auto* processPidOption = process->add_option("pid", processPid, "Process ID")->check(
         CLI::Range(1, std::numeric_limits<pid_t>::max()));
     process->add_flag("--raw-command", rawCommand,
                       "Display command arguments without best-effort redaction");
+    auto* processNameOption = process->add_option(
+        "--name", processNameFilter, "Filter by exact process name");
+    auto* processUserOption = process->add_option(
+        "--user", processUserFilter, "Filter by user name or UID");
+    auto* processServiceOption = process->add_option(
+        "--service", processServiceFilter, "Filter by systemd service");
     auto* stopProcess = process->add_subcommand("stop", "Send SIGTERM to a process");
     pid_t stopPid = -1;
     stopProcess->add_option("pid", stopPid, "Process ID")->required()->check(
@@ -535,16 +564,38 @@ int CliApp::run(
             output << fmt::format("Sent SIGKILL to PID {} via {}\n", killPid,
                                   mechanismName(result.value().mechanism));
         } else if (*process) {
-            if (processPidOption->count() == 0) {
-                error << "Process PID or action is required\n";
+            const bool hasFilters = processNameOption->count() != 0 ||
+                                    processUserOption->count() != 0 ||
+                                    processServiceOption->count() != 0;
+            if (processPidOption->count() != 0 && hasFilters) {
+                error << "Process PID cannot be combined with list filters\n";
                 return 2;
             }
-            const auto result = processService_.inspect(processPid);
-            if (!result) {
-                error << result.error().message << '\n';
-                return exitCode(result.error().code);
+            if (processPidOption->count() == 0) {
+                if (rawCommand) {
+                    error << "--raw-command requires a process PID\n";
+                    return 2;
+                }
+                ProcessQuery query;
+                if (processNameOption->count() != 0) query.name = processNameFilter;
+                if (processUserOption->count() != 0) query.user = processUserFilter;
+                if (processServiceOption->count() != 0) {
+                    query.systemdUnit = processServiceFilter;
+                }
+                const auto result = processService_.list(std::move(query));
+                if (!result) {
+                    error << result.error().message << '\n';
+                    return exitCode(result.error().code);
+                }
+                printProcesses(result.value(), output, error);
+            } else {
+                const auto result = processService_.inspect(processPid);
+                if (!result) {
+                    error << result.error().message << '\n';
+                    return exitCode(result.error().code);
+                }
+                printProcess(result.value(), rawCommand, output);
             }
-            printProcess(result.value(), rawCommand, output);
         } else if (*service) {
             if (serviceUnitOption->count() == 0) {
                 const auto result = serviceService_.list();

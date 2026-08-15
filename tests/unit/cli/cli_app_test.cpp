@@ -30,7 +30,15 @@ public:
     }
     lx::Result<lx::Observation<std::vector<lx::ProcessInfo>>> list() const override
     {
-        return lx::Result<lx::Observation<std::vector<lx::ProcessInfo>>>::success({{}, {}});
+        lx::ProcessInfo info;
+        info.pid = 42;
+        info.name = "demo";
+        info.user = "alice";
+        info.state = "sleeping";
+        info.threads = 2;
+        info.systemdUnit = "demo.service";
+        return lx::Result<lx::Observation<std::vector<lx::ProcessInfo>>>::success(
+            {{std::move(info)}, {}});
     }
 };
 
@@ -345,6 +353,17 @@ TEST_CASE("CLI prints process details with secrets redacted")
     REQUIRE(result.output.find("secret") == std::string::npos);
 }
 
+TEST_CASE("CLI lists processes and accepts list filters")
+{
+    const auto listed = runCli({"lx", "process"});
+    REQUIRE(listed.exitCode == 0);
+    REQUIRE(listed.output.find("PID") != std::string::npos);
+    REQUIRE(listed.output.find("demo.service") != std::string::npos);
+
+    REQUIRE(runCli({"lx", "process", "--name", "demo"}).exitCode == 0);
+    REQUIRE(runCli({"lx", "process", "42", "--user", "alice"}).exitCode == 2);
+}
+
 TEST_CASE("CLI raw process command is explicit")
 {
     const auto result = runCli({"lx", "process", "42", "--raw-command"});
@@ -387,7 +406,7 @@ TEST_CASE("CLI rejects protected process signal targets")
 {
     REQUIRE(runCli({"lx", "process", "stop", "1"}).exitCode == 7);
     REQUIRE(runCli({"lx", "process", "kill", "999", "--yes"}).exitCode == 7);
-    REQUIRE(runCli({"lx", "process"}).exitCode == 2);
+    REQUIRE(runCli({"lx", "process"}).exitCode == 0);
 }
 
 } // namespace
