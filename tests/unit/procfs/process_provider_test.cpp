@@ -70,3 +70,18 @@ TEST_CASE("process provider reads the running test process")
     REQUIRE_FALSE(result.value().value.name.empty());
     REQUIRE(result.value().value.uid == ::getuid());
 }
+
+TEST_CASE("process provider lists observable processes and preserves warnings")
+{
+    ProcessFixture fixture;
+    std::filesystem::create_directories(fixture.root() / "77");
+    std::ofstream(fixture.root() / "77" / "stat") << "invalid";
+    const lx::linux::procfs::ProcFsProcessProvider provider{fixture.root()};
+
+    const auto result = provider.list();
+
+    REQUIRE(result);
+    REQUIRE(result.value().value.size() == 1);
+    REQUIRE(result.value().value.front().pid == 42);
+    REQUIRE_FALSE(result.value().warnings.empty());
+}

@@ -28,6 +28,10 @@ public:
         info.argv = {"demo", "--token", "secret", "--port=80"};
         return lx::Result<lx::Observation<lx::ProcessInfo>>::success({std::move(info), {}});
     }
+    lx::Result<lx::Observation<std::vector<lx::ProcessInfo>>> list() const override
+    {
+        return lx::Result<lx::Observation<std::vector<lx::ProcessInfo>>>::success({{}, {}});
+    }
 };
 
 class FakeSocketProvider final : public lx::contracts::ISocketProvider {

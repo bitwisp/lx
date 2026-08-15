@@ -12,6 +12,7 @@ class ProcFsProcessProvider final : public contracts::IProcessProvider {
 public:
     explicit ProcFsProcessProvider(std::filesystem::path root = "/proc");
     [[nodiscard]] Result<Observation<ProcessInfo>> get(pid_t pid) const override;
+    [[nodiscard]] Result<Observation<std::vector<ProcessInfo>>> list() const override;
 
 private:
     ProcFsReader reader_;
@@ -19,4 +20,3 @@ private:
 };
 
 } // namespace lx::linux::procfs
-

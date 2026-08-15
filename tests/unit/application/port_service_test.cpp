@@ -64,6 +64,10 @@ public:
         return lx::Result<lx::Observation<lx::ProcessInfo>>::success(
             {std::move(info), {}});
     }
+    lx::Result<lx::Observation<std::vector<lx::ProcessInfo>>> list() const override
+    {
+        return lx::Result<lx::Observation<std::vector<lx::ProcessInfo>>>::success({{}, {}});
+    }
 
     mutable std::unordered_map<pid_t, int> calls;
 };
@@ -155,6 +159,10 @@ public:
         process.name = "managed";
         return lx::Result<lx::Observation<lx::ProcessInfo>>::success(
             {std::move(process), {}});
+    }
+    lx::Result<lx::Observation<std::vector<lx::ProcessInfo>>> list() const override
+    {
+        return lx::Result<lx::Observation<std::vector<lx::ProcessInfo>>>::success({{}, {}});
     }
 };
 

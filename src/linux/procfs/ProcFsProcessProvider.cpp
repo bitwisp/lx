@@ -5,6 +5,7 @@
 #include "lx/linux/procfs/StatusParser.h"
 
 #include <string>
+#include <iterator>
 #include <utility>
 
 namespace lx::linux::procfs {
@@ -84,5 +85,29 @@ Result<Observation<ProcessInfo>> ProcFsProcessProvider::get(const pid_t pid) con
     return Result<Observation<ProcessInfo>>::success(std::move(observation));
 }
 
-} // namespace lx::linux::procfs
+Result<Observation<std::vector<ProcessInfo>>> ProcFsProcessProvider::list() const
+{
+    const auto ids = reader_.processIds();
+    if (!ids) {
+        return Result<Observation<std::vector<ProcessInfo>>>::failure(ids.error());
+    }
 
+    Observation<std::vector<ProcessInfo>> observed;
+    observed.value.reserve(ids.value().size());
+    for (const auto pid : ids.value()) {
+        auto process = get(pid);
+        if (!process) {
+            observed.warnings.push_back(warningFrom(process.error()));
+            continue;
+        }
+        observed.value.push_back(std::move(process.value().value));
+        observed.warnings.insert(
+            observed.warnings.end(),
+            std::make_move_iterator(process.value().warnings.begin()),
+            std::make_move_iterator(process.value().warnings.end()));
+    }
+    return Result<Observation<std::vector<ProcessInfo>>>::success(
+        std::move(observed));
+}
+
+} // namespace lx::linux::procfs

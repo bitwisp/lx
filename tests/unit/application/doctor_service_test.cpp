@@ -13,6 +13,10 @@ public:
         return lx::Result<lx::Observation<lx::ProcessInfo>>::success(
             {std::move(info), {}});
     }
+    lx::Result<lx::Observation<std::vector<lx::ProcessInfo>>> list() const override
+    {
+        return lx::Result<lx::Observation<std::vector<lx::ProcessInfo>>>::success({{}, {}});
+    }
 };
 class DoctorSocketProvider final : public lx::contracts::ISocketProvider {
 public:

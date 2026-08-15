@@ -5,6 +5,7 @@
 #include "lx/domain/Result.h"
 
 #include <sys/types.h>
+#include <vector>
 
 namespace lx::contracts {
 
@@ -13,7 +14,7 @@ public:
     virtual ~IProcessProvider() = default;
 
     virtual Result<Observation<ProcessInfo>> get(pid_t pid) const = 0;
+    virtual Result<Observation<std::vector<ProcessInfo>>> list() const = 0;
 };
 
 } // namespace lx::contracts
-
