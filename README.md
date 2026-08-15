@@ -46,7 +46,10 @@ Phase 2 queries the kernel through `NETLINK_SOCK_DIAG` without invoking `ss`,
 ```
 
 TCP listeners and unconnected bound UDP sockets are shown for IPv4 and IPv6.
-Process ownership remains `unresolved` until Phase 3 maps socket inodes to PIDs.
+Phase 3 resolves each socket inode through `/proc/*/fd` and displays every
+owning process name and PID. Shared descriptors remain represented as multiple
+owners; inaccessible or short-lived processes produce warnings without hiding
+the socket.
 
 ## Design specification
 

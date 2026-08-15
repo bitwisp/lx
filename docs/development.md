@@ -86,6 +86,23 @@ and IPv4/IPv6, validates multipart Netlink responses, and converts kernel types
 into domain `SocketInfo` values. `lx port` lists TCP listeners and unconnected
 UDP bindings; `lx port PORT` filters by local port.
 
-Phase 2 leaves socket inode-to-PID resolution, service mapping, port
-termination, and JSON output for later phases. Integration tests create their
-own sockets and skip explicitly when the execution sandbox prohibits AF_INET.
+Phase 2 deliberately stopped before socket inode-to-PID resolution. Integration
+tests create their own sockets and skip explicitly when the execution sandbox
+prohibits AF_INET.
+
+## Phase 3 socket ownership
+
+`PortService` now coordinates `ISocketProvider`, `ISocketOwnerResolver`, and
+`IProcessProvider`. `SocketInodeResolver` gathers the requested non-zero inodes,
+scans the numeric `/proc/<pid>/fd` directories once, and recognizes strict
+`socket:[inode]` symbolic-link targets. It records every PID because file
+descriptors can be inherited or shared.
+
+`lx port` aggregates shared process names and PIDs on the socket row. A process
+that exits or becomes inaccessible during the snapshot does not remove the
+socket: its PID remains visible, its name is shown as `<unavailable>`, and a
+warning is written to standard error. Sockets with no visible owner remain
+`unresolved`.
+
+Phase 3 does not associate owners with systemd services and does not implement
+signals, `lx port free`, process lists, or JSON output.
