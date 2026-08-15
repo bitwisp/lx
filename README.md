@@ -51,6 +51,19 @@ Inspect and search related ports, processes, services, and recent logs:
 Explicit prefixes avoid ambiguity. If a bare number exists as both a port and
 PID, LX returns a conflict and suggests the two explicit forms.
 
+## JSON automation
+
+Major read-only commands provide stable schema version 1 JSON:
+
+```bash
+./build/debug/lx process --json
+./build/debug/lx inspect port:8080 --json
+./build/debug/lx log nginx --follow --json
+```
+
+Follow mode uses NDJSON. See
+[`docs/json-schema-v1.md`](docs/json-schema-v1.md) for the public contract.
+
 ## Port inspection
 
 Phase 2 queries the kernel through `NETLINK_SOCK_DIAG` without invoking `ss`,

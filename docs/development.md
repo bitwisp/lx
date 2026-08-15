@@ -283,3 +283,33 @@ numbers. Related ports are included when their process or service matches:
 Phase 7 remains read-only except for the existing explicit process, port, and
 service actions. CPU sampling, JSON output, quiet/no-color automation options,
 and full-disk executable search remain outside this phase.
+
+## Phase 8 JSON and automation
+
+All major read-only commands accept `--json` before or after the subcommand.
+They emit a versioned envelope to stdout and never mix human warnings into the
+document:
+
+```bash
+./build/debug/lx process --json
+./build/debug/lx port 8080 --json
+./build/debug/lx inspect service:nginx --json
+./build/debug/lx find nginx --json
+```
+
+Errors are also JSON and retain the documented exit codes. Destructive actions
+reject JSON mode before performing an operation. Follow mode uses NDJSON so
+every received line remains valid after interruption:
+
+```bash
+./build/debug/lx log nginx --follow --json
+```
+
+`--quiet` suppresses non-essential human warnings and successful action
+messages while retaining query data, errors, and confirmation prompts.
+`--no-color` and a non-empty `NO_COLOR` environment variable disable ANSI
+styling. JSON warnings remain part of the document even with `--quiet`.
+
+The normative field contract is documented in
+[`json-schema-v1.md`](json-schema-v1.md). Breaking field changes require a new
+schema version.
