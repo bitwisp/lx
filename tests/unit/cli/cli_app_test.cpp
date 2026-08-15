@@ -1,6 +1,7 @@
 #include "lx/cli/CliApp.h"
 #include "lx/application/DoctorService.h"
 #include "lx/application/ProcessService.h"
+#include "lx/application/PortService.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -26,6 +27,15 @@ public:
     }
 };
 
+class FakeSocketProvider final : public lx::contracts::ISocketProvider {
+public:
+    lx::Result<lx::Observation<std::vector<lx::SocketInfo>>> query(const lx::SocketQuery& query) const override {
+        std::vector<lx::SocketInfo> values;
+        if (!query.localPort || *query.localPort == 8080) { lx::SocketInfo socket; socket.local={"127.0.0.1",8080};socket.state="listen";socket.uid=1000;socket.inode=42;values.push_back(socket); }
+        return lx::Result<lx::Observation<std::vector<lx::SocketInfo>>>::success({std::move(values),{}});
+    }
+};
+
 struct CliResult {
     int exitCode;
     std::string output;
@@ -45,10 +55,19 @@ CliResult runCli(std::vector<std::string> arguments)
     const FakeProcessProvider provider;
     const lx::application::DoctorService doctorService{provider};
     const lx::application::ProcessService processService{provider};
-    const auto exitCode = lx::cli::CliApp{doctorService, processService}.run(
+    const FakeSocketProvider socketProvider;
+    const lx::application::PortService portService{socketProvider};
+    const auto exitCode = lx::cli::CliApp{doctorService, processService, portService}.run(
         static_cast<int>(argv.size()), argv.data(), output, error);
     return {exitCode, output.str(), error.str()};
 }
+
+TEST_CASE("CLI lists and filters ports") {
+    const auto all=runCli({"lx","port"}); REQUIRE(all.exitCode==0); REQUIRE(all.output.find("127.0.0.1")!=std::string::npos); REQUIRE(all.output.find("unresolved")!=std::string::npos);
+    REQUIRE(runCli({"lx","port","9999"}).exitCode==3);
+}
+
+TEST_CASE("CLI validates port range") { REQUIRE(runCli({"lx","port","0"}).exitCode==2); REQUIRE(runCli({"lx","port","65536"}).exitCode==2); }
 
 TEST_CASE("CLI prints process details with secrets redacted")
 {

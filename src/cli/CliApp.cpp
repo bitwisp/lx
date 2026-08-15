@@ -3,6 +3,7 @@
 #include "lx/Version.h"
 #include "lx/application/DoctorService.h"
 #include "lx/application/ProcessService.h"
+#include "lx/application/PortService.h"
 
 #include <CLI/CLI.hpp>
 #include <fmt/format.h>
@@ -126,8 +127,9 @@ int exitCode(const ErrorCode code)
 } // namespace
 
 CliApp::CliApp(const application::DoctorService& doctorService,
-               const application::ProcessService& processService) noexcept
-    : doctorService_(doctorService), processService_(processService)
+               const application::ProcessService& processService,
+               const application::PortService& portService) noexcept
+    : doctorService_(doctorService), processService_(processService), portService_(portService)
 {
 }
 
@@ -147,6 +149,9 @@ int CliApp::run(
         CLI::Range(1, std::numeric_limits<pid_t>::max()));
     process->add_flag("--raw-command", rawCommand,
                       "Display command arguments without best-effort redaction");
+    auto* port = app.add_subcommand("port", "List listening ports");
+    std::uint32_t portNumber = 0;
+    auto* portOption = port->add_option("port", portNumber, "Local port")->check(CLI::Range(1, 65535));
 
     try {
         app.parse(argc, argv);
@@ -159,6 +164,15 @@ int CliApp::run(
                 return exitCode(result.error().code);
             }
             printProcess(result.value(), rawCommand, output);
+        } else if (*port) {
+            SocketQuery query;
+            if (portOption->count() != 0) query.localPort = static_cast<std::uint16_t>(portNumber);
+            const auto result = portService_.query(query);
+            if (!result) { error << result.error().message << '\n'; return exitCode(result.error().code); }
+            if (result.value().value.empty() && query.localPort) { error << "No socket found for port " << portNumber << '\n'; return 3; }
+            output << "PROTO  ADDRESS                                  PORT   STATE        UID     INODE       PROCESS\n";
+            for (const auto& socket : result.value().value) output << fmt::format("{:<6} {:<40} {:<6} {:<12} {:<7} {:<11} unresolved\n", socket.protocol==TransportProtocol::Tcp?"TCP":"UDP",socket.local.address,socket.local.port,socket.state,socket.uid,socket.inode);
+            for (const auto& warning : result.value().warnings) error << "Warning: " << warning.message << '\n';
         }
         return 0;
     } catch (const CLI::ParseError& parseError) {
