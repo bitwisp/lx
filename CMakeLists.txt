@@ -125,6 +125,7 @@ add_library(
     src/application/DoctorService.cpp
     src/application/ProcessService.cpp
     src/application/PortService.cpp
+    src/application/ServiceService.cpp
 )
 add_library(lx::application ALIAS lx_application)
 target_link_libraries(lx_application PUBLIC lx::core PRIVATE lx_warnings)
