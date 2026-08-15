@@ -16,6 +16,7 @@ add_executable(
     unit/procfs/process_provider_test.cpp
     unit/procfs/procfs_reader_test.cpp
     unit/procfs/socket_fd_target_test.cpp
+    unit/procfs/socket_inode_resolver_test.cpp
     unit/procfs/stat_parser_test.cpp
     unit/procfs/status_parser_test.cpp
     unit/smoke_test.cpp
