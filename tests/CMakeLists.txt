@@ -11,6 +11,7 @@ add_executable(
     unit/application/signal_provider_contract_test.cpp
     unit/cli/cli_app_test.cpp
     unit/domain/observation_test.cpp
+    unit/domain/journal_entry_test.cpp
     unit/domain/port_info_test.cpp
     unit/domain/port_release_test.cpp
     unit/domain/process_signal_test.cpp
