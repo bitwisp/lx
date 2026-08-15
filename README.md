@@ -51,6 +51,21 @@ owning process name and PID. Shared descriptors remain represented as multiple
 owners; inaccessible or short-lived processes produce warnings without hiding
 the socket.
 
+## Process control
+
+Phase 4 uses native Linux signal APIs. It prefers pidfds at runtime and falls
+back to `kill(2)` on older kernels:
+
+```bash
+./build/debug/lx process stop 1234
+./build/debug/lx process kill 1234
+./build/debug/lx port free 8080
+```
+
+SIGKILL and port release are confirmed interactively unless `--yes` is given.
+PID 1, the running LX process, unresolved port owners, and changed port
+ownership are always rejected; `--yes` never bypasses these protections.
+
 ## Design specification
 
 [`LX_CPP17_Linux_Resource_Manager_Design.md`](LX_CPP17_Linux_Resource_Manager_Design.md)

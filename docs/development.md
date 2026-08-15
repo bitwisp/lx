@@ -104,5 +104,29 @@ socket: its PID remains visible, its name is shown as `<unavailable>`, and a
 warning is written to standard error. Sockets with no visible owner remain
 `unresolved`.
 
-Phase 3 does not associate owners with systemd services and does not implement
-signals, `lx port free`, process lists, or JSON output.
+Phase 3 deliberately stopped before process signals and port release, and it
+still left systemd association, process lists, and JSON output for later work.
+
+## Phase 4 process signals
+
+The signal path follows `CLI -> ProcessService -> ISignalProvider ->
+LinuxSignalProvider`. `PidFd` owns native process handles with RAII. The Linux
+adapter probes pidfd support at runtime, uses `pidfd_send_signal` when possible,
+and falls back to `kill(2)` only when pidfd is unsupported. `lx doctor` reports
+which path is available.
+
+`ProcessService` rejects PID 1, non-positive PIDs, and LX's own PID before a
+provider is called. `lx process stop PID` sends SIGTERM. `lx process kill PID`
+requires explicit confirmation by default.
+
+`lx port free PORT` snapshots every socket and owner, displays the targets, and
+revalidates the inode-to-PID relationship after confirmation. It sends SIGTERM
+to all unique owners and waits up to three seconds. If the original owners
+still hold the port, a second default-no confirmation allows SIGKILL. A new
+inode or owner aborts the action with a conflict instead of signaling the new
+process. Unresolved ownership also aborts the entire operation.
+
+Signal integration tests fork their own child processes and always reap them.
+They never target an unrelated host process. Phase 4 still leaves systemd-aware
+stopping, configuration-driven confirmation, process lists, and JSON for later
+phases.
