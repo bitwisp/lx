@@ -1,5 +1,6 @@
 #include "lx/application/PortService.h"
 #include "lx/application/ProcessService.h"
+#include "lx/application/ServiceService.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -103,6 +104,107 @@ public:
         return lx::Result<lx::Observation<lx::SocketOwnership>>::success(
             {{}, {}});
     }
+};
+
+class ManagedSocketProvider final : public lx::contracts::ISocketProvider {
+public:
+    explicit ManagedSocketProvider(const bool& stopped) : stopped_(stopped) {}
+
+    lx::Result<lx::Observation<std::vector<lx::SocketInfo>>> query(
+        const lx::SocketQuery&) const override
+    {
+        if (stopped_) {
+            return lx::Result<lx::Observation<std::vector<lx::SocketInfo>>>::success(
+                {{}, {}});
+        }
+        lx::SocketInfo socket;
+        socket.local.port = 8080;
+        socket.inode = 42;
+        return lx::Result<lx::Observation<std::vector<lx::SocketInfo>>>::success(
+            {{std::move(socket)}, {}});
+    }
+
+private:
+    const bool& stopped_;
+};
+
+class ManagedOwnerResolver final : public lx::contracts::ISocketOwnerResolver {
+public:
+    lx::Result<lx::Observation<lx::SocketOwnership>> resolve(
+        const std::vector<std::uint64_t>&) const override
+    {
+        ++calls;
+        const std::vector<pid_t> owners = changeAfterFirst && calls > 1
+                                              ? std::vector<pid_t>{30}
+                                              : std::vector<pid_t>{10, 20};
+        return lx::Result<lx::Observation<lx::SocketOwnership>>::success(
+            {{{42, owners}}, {}});
+    }
+
+    bool changeAfterFirst = false;
+    mutable int calls = 0;
+};
+
+class ManagedProcessProvider final : public lx::contracts::IProcessProvider {
+public:
+    lx::Result<lx::Observation<lx::ProcessInfo>> get(
+        const pid_t pid) const override
+    {
+        lx::ProcessInfo process;
+        process.pid = pid;
+        process.name = "managed";
+        return lx::Result<lx::Observation<lx::ProcessInfo>>::success(
+            {std::move(process), {}});
+    }
+};
+
+class ManagedServiceProvider final : public lx::contracts::IServiceProvider {
+public:
+    explicit ManagedServiceProvider(bool& stopped) : stopped_(stopped) {}
+
+    lx::Result<void> probe() const override { return lx::Result<void>::success(); }
+    lx::Result<lx::Observation<std::vector<lx::ServiceInfo>>> list()
+        const override
+    {
+        return lx::Result<lx::Observation<std::vector<lx::ServiceInfo>>>::success(
+            {{}, {}});
+    }
+    lx::Result<lx::Observation<lx::ServiceInfo>> get(
+        const std::string&) const override
+    {
+        return lx::Result<lx::Observation<lx::ServiceInfo>>::failure(
+            {lx::ErrorCode::NotFound, "missing", 0, "fake", "get"});
+    }
+    lx::Result<std::optional<std::string>> unitByPid(
+        const pid_t pid) const override
+    {
+        if (pid == 20 && secondUnit.empty()) {
+            return lx::Result<std::optional<std::string>>::success(std::nullopt);
+        }
+        return lx::Result<std::optional<std::string>>::success(
+            pid == 20 ? secondUnit : firstUnit);
+    }
+    lx::Result<void> start(const std::string&) const override
+    {
+        return lx::Result<void>::success();
+    }
+    lx::Result<void> stop(const std::string&) const override
+    {
+        ++stopCalls;
+        stopped_ = true;
+        return lx::Result<void>::success();
+    }
+    lx::Result<void> restart(const std::string&) const override
+    {
+        return lx::Result<void>::success();
+    }
+
+    std::string firstUnit = "demo.service";
+    std::string secondUnit = "demo.service";
+    mutable int stopCalls = 0;
+
+private:
+    bool& stopped_;
 };
 
 } // namespace
@@ -257,4 +359,76 @@ TEST_CASE("PortService reports ownership changes after SIGKILL")
     REQUIRE_FALSE(result);
     REQUIRE(result.error().code == lx::ErrorCode::Conflict);
     REQUIRE(signals.sent.size() == 2);
+}
+
+TEST_CASE("PortService recommends and stops one common owning service")
+{
+    bool stopped = false;
+    const ManagedSocketProvider sockets{stopped};
+    const ManagedOwnerResolver owners;
+    const ManagedProcessProvider processes;
+    const SignalProvider signals;
+    ManagedServiceProvider serviceProvider{stopped};
+    const lx::application::ServiceService services{serviceProvider};
+    const lx::application::ProcessService processService{
+        processes, signals, 99, &services};
+    const lx::application::PortService ports{
+        sockets, owners, processService, &services,
+        std::chrono::milliseconds{0}};
+
+    const auto plan = ports.prepareRelease(8080);
+    REQUIRE(plan);
+    REQUIRE(plan.value().value.recommendedUnit == "demo.service");
+
+    const auto result = ports.stopManagedService(plan.value().value);
+    REQUIRE(result);
+    REQUIRE(result.value().value.released);
+    REQUIRE(serviceProvider.stopCalls == 1);
+    REQUIRE(signals.sent.empty());
+}
+
+TEST_CASE("PortService does not recommend mixed or unknown services")
+{
+    bool stopped = false;
+    const ManagedSocketProvider sockets{stopped};
+    const ManagedOwnerResolver owners;
+    const ManagedProcessProvider processes;
+    const SignalProvider signals;
+    ManagedServiceProvider serviceProvider{stopped};
+    const lx::application::ServiceService services{serviceProvider};
+    const lx::application::ProcessService processService{
+        processes, signals, 99, &services};
+    const lx::application::PortService ports{
+        sockets, owners, processService, &services,
+        std::chrono::milliseconds{0}};
+
+    serviceProvider.secondUnit = "other.service";
+    REQUIRE_FALSE(ports.prepareRelease(8080).value().value.recommendedUnit);
+    serviceProvider.secondUnit.clear();
+    REQUIRE_FALSE(ports.prepareRelease(8080).value().value.recommendedUnit);
+}
+
+TEST_CASE("PortService revalidates owners before stopping a service")
+{
+    bool stopped = false;
+    const ManagedSocketProvider sockets{stopped};
+    ManagedOwnerResolver owners;
+    owners.changeAfterFirst = true;
+    const ManagedProcessProvider processes;
+    const SignalProvider signals;
+    ManagedServiceProvider serviceProvider{stopped};
+    const lx::application::ServiceService services{serviceProvider};
+    const lx::application::ProcessService processService{
+        processes, signals, 99, &services};
+    const lx::application::PortService ports{
+        sockets, owners, processService, &services,
+        std::chrono::milliseconds{0}};
+
+    const auto plan = ports.prepareRelease(8080);
+    REQUIRE(plan);
+    const auto result = ports.stopManagedService(plan.value().value);
+
+    REQUIRE_FALSE(result);
+    REQUIRE(result.error().code == lx::ErrorCode::Conflict);
+    REQUIRE(serviceProvider.stopCalls == 0);
 }

@@ -181,6 +181,11 @@ void printReleasePlan(const PortReleasePlan& plan, std::ostream& output)
         output << fmt::format("{:<8} {}\n", pid, processName(plan, pid));
     }
     output << '\n';
+    if (plan.recommendedUnit) {
+        output << fmt::format(
+            "All owners belong to {}.\nRecommended action: stop the service instead of signaling its processes.\n\n",
+            *plan.recommendedUnit);
+    }
 }
 
 void printProcess(const Observation<ProcessInfo>& observed, const bool raw,
@@ -424,6 +429,29 @@ int CliApp::run(
                 return exitCode(plan.error().code);
             }
             printReleasePlan(plan.value().value, output);
+            if (plan.value().value.recommendedUnit) {
+                if (!confirmRelease &&
+                    !confirm(input, output,
+                             fmt::format("Stop {}? [Y/n] ",
+                                         *plan.value().value.recommendedUnit),
+                             true)) {
+                    output << "Cancelled.\n";
+                    return 0;
+                }
+                auto stopped = portService_.stopManagedService(
+                    plan.value().value);
+                if (!stopped) {
+                    error << stopped.error().message << '\n';
+                    return exitCode(stopped.error().code);
+                }
+                for (const auto& warning : stopped.value().warnings) {
+                    error << "Warning: " << warning.message << '\n';
+                }
+                output << fmt::format("Port {} released by stopping {}.\n",
+                                      freePortNumber,
+                                      *plan.value().value.recommendedUnit);
+                return 0;
+            }
             if (!confirmRelease && !confirm(
                     input, output, "Send SIGTERM to all owners? [Y/n] ", true)) {
                 output << "Cancelled.\n";

@@ -1,11 +1,13 @@
 #include "lx/application/PortService.h"
 
 #include "lx/application/ProcessService.h"
+#include "lx/application/ServiceService.h"
 
 #include <algorithm>
 #include <chrono>
 #include <iterator>
 #include <tuple>
+#include <thread>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -89,7 +91,20 @@ PortService::PortService(
     const ProcessService& processService,
     const std::chrono::milliseconds gracePeriod) noexcept
     : socketProvider_(socketProvider), ownerResolver_(ownerResolver),
-      processService_(processService), gracePeriod_(gracePeriod)
+      processService_(processService), serviceService_(nullptr),
+      gracePeriod_(gracePeriod)
+{
+}
+
+PortService::PortService(
+    const contracts::ISocketProvider& socketProvider,
+    const contracts::ISocketOwnerResolver& ownerResolver,
+    const ProcessService& processService,
+    const ServiceService* serviceService,
+    const std::chrono::milliseconds gracePeriod) noexcept
+    : socketProvider_(socketProvider), ownerResolver_(ownerResolver),
+      processService_(processService), serviceService_(serviceService),
+      gracePeriod_(gracePeriod)
 {
 }
 
@@ -196,6 +211,32 @@ Result<Observation<PortReleasePlan>> PortService::prepareRelease(
     plan.ownerPids.erase(
         std::unique(plan.ownerPids.begin(), plan.ownerPids.end()),
         plan.ownerPids.end());
+
+    std::optional<std::string> commonUnit;
+    bool managedByOneService = !plan.ownerPids.empty();
+    for (const auto pid : plan.ownerPids) {
+        const ProcessInfo* owner = nullptr;
+        for (const auto& port : plan.ports) {
+            const auto found = std::find_if(
+                port.owners.begin(), port.owners.end(),
+                [pid](const ProcessInfo& process) { return process.pid == pid; });
+            if (found != port.owners.end()) {
+                owner = &*found;
+                break;
+            }
+        }
+        if (owner == nullptr || !owner->systemdUnit) {
+            managedByOneService = false;
+            break;
+        }
+        if (!commonUnit) commonUnit = owner->systemdUnit;
+        else if (*commonUnit != *owner->systemdUnit) {
+            managedByOneService = false;
+            break;
+        }
+    }
+    if (managedByOneService) plan.recommendedUnit = std::move(commonUnit);
+
     for (const auto pid : plan.ownerPids) {
         const auto valid = processService_.validateSignalTarget(pid);
         if (!valid) {
@@ -204,6 +245,62 @@ Result<Observation<PortReleasePlan>> PortService::prepareRelease(
     }
     return Result<Observation<PortReleasePlan>>::success(
         {std::move(plan), std::move(inspected.value().warnings)});
+}
+
+Result<Observation<PortReleaseResult>> PortService::stopManagedService(
+    const PortReleasePlan& plan) const
+{
+    if (!plan.recommendedUnit || serviceService_ == nullptr) {
+        return Result<Observation<PortReleaseResult>>::failure(
+            {ErrorCode::InvalidArgument,
+             "Port release plan has no managed service", 0, "port-service",
+             "stop managed service"});
+    }
+
+    auto current = prepareRelease(plan.localPort);
+    if (!current) {
+        if (current.error().code == ErrorCode::NotFound) {
+            return Result<Observation<PortReleaseResult>>::success(
+                {{true, {}, std::nullopt}, {}});
+        }
+        return Result<Observation<PortReleaseResult>>::failure(current.error());
+    }
+    if (!sameTargets(plan, current.value().value) ||
+        current.value().value.recommendedUnit != plan.recommendedUnit) {
+        return Result<Observation<PortReleaseResult>>::failure(
+            changedTargetError());
+    }
+
+    auto stopped = serviceService_->stop(*plan.recommendedUnit);
+    if (!stopped) {
+        return Result<Observation<PortReleaseResult>>::failure(stopped.error());
+    }
+
+    auto warnings = std::move(current.value().warnings);
+    const auto deadline = std::chrono::steady_clock::now() + gracePeriod_;
+    while (true) {
+        auto after = prepareRelease(plan.localPort);
+        if (!after) {
+            if (after.error().code == ErrorCode::NotFound) {
+                return Result<Observation<PortReleaseResult>>::success(
+                    {{true, {}, std::nullopt}, std::move(warnings)});
+            }
+            return Result<Observation<PortReleaseResult>>::failure(after.error());
+        }
+        appendWarnings(warnings, after.value().warnings);
+        if (!remainingTargetsBelongTo(plan, after.value().value)) {
+            return Result<Observation<PortReleaseResult>>::failure(
+                changedTargetError());
+        }
+        if (std::chrono::steady_clock::now() >= deadline) {
+            return Result<Observation<PortReleaseResult>>::failure(
+                {ErrorCode::Timeout,
+                 "Port is still occupied after stopping " +
+                     *plan.recommendedUnit,
+                 0, "port-service", "stop managed service"});
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds{25});
+    }
 }
 
 Result<Observation<PortReleaseResult>> PortService::terminate(

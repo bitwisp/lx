@@ -8,12 +8,19 @@
 
 namespace lx::application {
 class ProcessService;
+class ServiceService;
 
 class PortService final {
 public:
     PortService(const contracts::ISocketProvider& socketProvider,
                 const contracts::ISocketOwnerResolver& ownerResolver,
                 const ProcessService& processService,
+                std::chrono::milliseconds gracePeriod =
+                    std::chrono::seconds{3}) noexcept;
+    PortService(const contracts::ISocketProvider& socketProvider,
+                const contracts::ISocketOwnerResolver& ownerResolver,
+                const ProcessService& processService,
+                const ServiceService* serviceService,
                 std::chrono::milliseconds gracePeriod =
                     std::chrono::seconds{3}) noexcept;
 
@@ -25,11 +32,14 @@ public:
         const PortReleasePlan& plan) const;
     Result<Observation<PortReleaseResult>> force(
         const PortReleasePlan& plan) const;
+    Result<Observation<PortReleaseResult>> stopManagedService(
+        const PortReleasePlan& plan) const;
 
 private:
     const contracts::ISocketProvider& socketProvider_;
     const contracts::ISocketOwnerResolver& ownerResolver_;
     const ProcessService& processService_;
+    const ServiceService* serviceService_;
     std::chrono::milliseconds gracePeriod_;
 };
 } // namespace lx::application

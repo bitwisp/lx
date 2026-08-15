@@ -32,7 +32,7 @@ int main(const int argc, char** argv)
     const lx::linux::netlink::NetlinkSocketProvider socketProvider;
     const lx::linux::procfs::SocketInodeResolver socketOwnerResolver;
     const lx::application::PortService portService{
-        socketProvider, socketOwnerResolver, processService};
+        socketProvider, socketOwnerResolver, processService, &serviceService};
     const lx::application::DoctorService doctorService{
         processProvider, socketProvider, signalProvider};
     return lx::cli::CliApp{doctorService, processService, portService,

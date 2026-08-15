@@ -81,6 +81,10 @@ private:
 
 class FakeServiceProvider final : public lx::contracts::IServiceProvider {
 public:
+    explicit FakeServiceProvider(int& releaseStage)
+        : releaseStage_(releaseStage)
+    {
+    }
     lx::Result<void> probe() const override
     {
         return lx::Result<void>::success();
@@ -124,12 +128,16 @@ public:
     }
     lx::Result<void> stop(const std::string&) const override
     {
+        releaseStage_ = 2;
         return lx::Result<void>::success();
     }
     lx::Result<void> restart(const std::string&) const override
     {
         return lx::Result<void>::success();
     }
+
+private:
+    int& releaseStage_;
 };
 
 struct CliResult {
@@ -153,7 +161,7 @@ CliResult runCli(std::vector<std::string> arguments,
     int releaseStage = 0;
     const FakeProcessProvider provider;
     const FakeSignalProvider signalProvider{releaseStage};
-    const FakeServiceProvider serviceProvider;
+    const FakeServiceProvider serviceProvider{releaseStage};
     const lx::application::ServiceService serviceService{serviceProvider};
     const lx::application::ProcessService processService{
         provider, signalProvider, 999, &serviceService};
@@ -162,7 +170,7 @@ CliResult runCli(std::vector<std::string> arguments,
     const lx::application::DoctorService doctorService{
         provider, socketProvider, signalProvider};
     const lx::application::PortService portService{
-        socketProvider, socketOwnerResolver, processService};
+        socketProvider, socketOwnerResolver, processService, &serviceService};
     const auto exitCode = lx::cli::CliApp{doctorService, processService,
                                          portService, serviceService}.run(
         static_cast<int>(argv.size()), argv.data(), input, output, error);
@@ -208,20 +216,19 @@ TEST_CASE("CLI controls services with conservative confirmation")
 
 TEST_CASE("CLI confirms graceful and forced port release")
 {
-    const auto cancelled = runCli({"lx", "port", "free", "8080"}, "\n");
+    const auto cancelled = runCli({"lx", "port", "free", "8080"}, "no\n");
     REQUIRE(cancelled.exitCode == 0);
-    REQUIRE(cancelled.output.find("Port is still occupied") != std::string::npos);
     REQUIRE(cancelled.output.find("Cancelled.") != std::string::npos);
 
-    const auto forced = runCli(
-        {"lx", "port", "free", "8080"}, "\nyes\n");
-    REQUIRE(forced.exitCode == 0);
-    REQUIRE(forced.output.find("released with SIGKILL") != std::string::npos);
+    const auto stopped = runCli(
+        {"lx", "port", "free", "8080"}, "\n");
+    REQUIRE(stopped.exitCode == 0);
+    REQUIRE(stopped.output.find("stopping demo.service") != std::string::npos);
 
     const auto assumed = runCli(
         {"lx", "port", "free", "8080", "--yes"});
     REQUIRE(assumed.exitCode == 0);
-    REQUIRE(assumed.output.find("released with SIGKILL") != std::string::npos);
+    REQUIRE(assumed.output.find("stopping demo.service") != std::string::npos);
 }
 
 TEST_CASE("CLI refuses to free ports with unresolved owners")
