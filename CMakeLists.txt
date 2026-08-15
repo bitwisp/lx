@@ -54,6 +54,7 @@ lx_set_project_warnings(lx_warnings)
 add_library(lx_linux STATIC
     src/linux/netlink/InetDiagCodec.cpp
     src/linux/netlink/NetlinkSocket.cpp
+    src/linux/netlink/NetlinkSocketProvider.cpp
     src/linux/procfs/CmdlineParser.cpp
     src/linux/procfs/PasswdUserResolver.cpp
     src/linux/procfs/ProcFsReader.cpp

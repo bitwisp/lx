@@ -8,6 +8,7 @@ add_executable(
     unit/domain/socket_info_test.cpp
     unit/procfs/cmdline_parser_test.cpp
     unit/netlink/inet_diag_request_test.cpp
+    unit/netlink/socket_provider_test.cpp
     unit/netlink/inet_diag_parser_test.cpp
     unit/procfs/passwd_user_resolver_test.cpp
     unit/procfs/process_provider_test.cpp
