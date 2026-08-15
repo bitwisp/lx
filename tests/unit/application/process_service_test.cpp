@@ -16,7 +16,18 @@ public:
     }
     lx::Result<lx::Observation<std::vector<lx::ProcessInfo>>> list() const override
     {
-        return lx::Result<lx::Observation<std::vector<lx::ProcessInfo>>>::success({{}, {}});
+        lx::ProcessInfo first;
+        first.pid = 42;
+        first.name = "nginx";
+        first.user = "alice";
+        first.uid = 1000;
+        lx::ProcessInfo second;
+        second.pid = 43;
+        second.name = "worker";
+        second.user = "bob";
+        second.uid = 1001;
+        return lx::Result<lx::Observation<std::vector<lx::ProcessInfo>>>::success(
+            {{first, second}, {}});
     }
 };
 
@@ -160,4 +171,44 @@ TEST_CASE("ProcessService refuses PID 1 and its own process")
     REQUIRE_FALSE(service.kill(99));
     REQUIRE(service.kill(99).error().code == lx::ErrorCode::Conflict);
     REQUIRE(signals.deliveredPid == -1);
+}
+
+TEST_CASE("ProcessService filters process lists by name user and UID")
+{
+    const FakeProcessProvider provider;
+    const FakeSignalProvider signals;
+    const lx::application::ProcessService service{provider, signals, 99};
+
+    lx::ProcessQuery byName;
+    byName.name = "nginx";
+    const auto named = service.list(byName);
+    REQUIRE(named);
+    REQUIRE(named.value().value.size() == 1);
+    CHECK(named.value().value.front().pid == 42);
+
+    lx::ProcessQuery byUser;
+    byUser.user = "1001";
+    const auto owned = service.list(byUser);
+    REQUIRE(owned);
+    REQUIRE(owned.value().value.size() == 1);
+    CHECK(owned.value().value.front().pid == 43);
+}
+
+TEST_CASE("ProcessService filters process lists by normalized service")
+{
+    const FakeProcessProvider provider;
+    const FakeSignalProvider signals;
+    const FakeServiceProvider serviceProvider;
+    const lx::application::ServiceService services{serviceProvider};
+    const lx::application::ProcessService service{
+        provider, signals, 99, &services};
+
+    lx::ProcessQuery query;
+    query.systemdUnit = "demo";
+    const auto result = service.list(query);
+
+    REQUIRE(result);
+    REQUIRE(result.value().value.size() == 1);
+    CHECK(result.value().value.front().pid == 42);
+    CHECK(result.value().value.front().systemdUnit == "demo.service");
 }

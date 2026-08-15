@@ -2,6 +2,7 @@
 
 #include "lx/contracts/IProcessProvider.h"
 #include "lx/contracts/ISignalProvider.h"
+#include "lx/domain/ProcessQuery.h"
 
 #include <chrono>
 
@@ -17,6 +18,8 @@ public:
                    const ServiceService* serviceService = nullptr) noexcept;
 
     [[nodiscard]] Result<Observation<ProcessInfo>> inspect(pid_t pid) const;
+    [[nodiscard]] Result<Observation<std::vector<ProcessInfo>>> list(
+        ProcessQuery query = {}) const;
     [[nodiscard]] Result<SignalDelivery> stop(pid_t pid) const;
     [[nodiscard]] Result<SignalDelivery> kill(pid_t pid) const;
     [[nodiscard]] Result<bool> waitForExit(
