@@ -131,6 +131,7 @@ add_library(
     src/application/DoctorService.cpp
     src/application/FindService.cpp
     src/application/LogService.cpp
+    src/application/MetricsService.cpp
     src/application/InspectService.cpp
     src/application/ProcessService.cpp
     src/application/PortService.cpp
