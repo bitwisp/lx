@@ -143,6 +143,25 @@ std::string ownerPids(const PortInfo& port)
     return joined.str();
 }
 
+std::string ownerServices(const PortInfo& port)
+{
+    std::vector<std::string> units;
+    for (const auto& owner : port.owners) {
+        if (owner.systemdUnit &&
+            std::find(units.begin(), units.end(), *owner.systemdUnit) ==
+                units.end()) {
+            units.push_back(*owner.systemdUnit);
+        }
+    }
+    if (units.empty()) return "-";
+    std::ostringstream joined;
+    for (std::size_t index = 0; index < units.size(); ++index) {
+        if (index != 0) joined << ',';
+        joined << units[index];
+    }
+    return joined.str();
+}
+
 std::string processName(const PortReleasePlan& plan, const pid_t pid)
 {
     for (const auto& port : plan.ports) {
@@ -449,15 +468,15 @@ int CliApp::run(
             const auto result = portService_.inspect(query);
             if (!result) { error << result.error().message << '\n'; return exitCode(result.error().code); }
             if (result.value().value.empty() && query.localPort) { error << "No socket found for port " << portNumber << '\n'; return 3; }
-            output << "PROTO  ADDRESS                                  PORT   STATE        UID     INODE       PROCESS                  PID\n";
+            output << "PROTO  ADDRESS                                  PORT   STATE        UID     INODE       PROCESS          PID          SERVICE\n";
             for (const auto& portInfo : result.value().value) {
                 const auto& socket = portInfo.socket;
                 output << fmt::format(
-                    "{:<6} {:<40} {:<6} {:<12} {:<7} {:<11} {:<24} {}\n",
+                    "{:<6} {:<40} {:<6} {:<12} {:<7} {:<11} {:<16} {:<12} {}\n",
                     socket.protocol == TransportProtocol::Tcp ? "TCP" : "UDP",
                     socket.local.address, socket.local.port, socket.state,
                     socket.uid, socket.inode, ownerNames(portInfo),
-                    ownerPids(portInfo));
+                    ownerPids(portInfo), ownerServices(portInfo));
             }
             for (const auto& warning : result.value().warnings) error << "Warning: " << warning.message << '\n';
         }

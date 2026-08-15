@@ -170,7 +170,7 @@ CliResult runCli(std::vector<std::string> arguments,
 }
 
 TEST_CASE("CLI lists and filters ports") {
-    const auto all=runCli({"lx","port"}); REQUIRE(all.exitCode==0); REQUIRE(all.output.find("127.0.0.1")!=std::string::npos); REQUIRE(all.output.find("demo,worker")!=std::string::npos); REQUIRE(all.output.find("10,20")!=std::string::npos); REQUIRE(all.output.find("unresolved")!=std::string::npos);
+    const auto all=runCli({"lx","port"}); REQUIRE(all.exitCode==0); REQUIRE(all.output.find("127.0.0.1")!=std::string::npos); REQUIRE(all.output.find("demo,worker")!=std::string::npos); REQUIRE(all.output.find("10,20")!=std::string::npos); REQUIRE(all.output.find("demo.service")!=std::string::npos); REQUIRE(all.output.find("unresolved")!=std::string::npos);
     const auto unavailable=runCli({"lx","port","9090"}); REQUIRE(unavailable.output.find("<unavailable>")!=std::string::npos); REQUIRE(unavailable.output.find("404")!=std::string::npos);
     REQUIRE(runCli({"lx","port","9999"}).exitCode==3);
 }
