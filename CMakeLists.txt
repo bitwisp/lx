@@ -215,6 +215,11 @@ install(
     RENAME lx
     COMPONENT completion
 )
+install(
+    FILES completions/_lx
+    DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/zsh/site-functions"
+    COMPONENT completion
+)
 
 if(LX_ENABLE_LTO)
     include(CheckIPOSupported)

@@ -1,0 +1,92 @@
+#compdef lx
+
+_lx()
+{
+    local context state line
+    typeset -A opt_args
+
+    _arguments -C \
+        '--json[write stable machine-readable JSON]' \
+        '--quiet[suppress non-essential diagnostics]' \
+        '--no-color[disable ANSI color output]' \
+        '--version[show version]' \
+        '(-h --help)'{-h,--help}'[show help]' \
+        '1:command:->command' \
+        '*::argument:->arguments'
+
+    case ${state} in
+        command)
+            _values 'lx command' \
+                'status[show host CPU, memory, and uptime]' \
+                'process[list, inspect, or signal processes]' \
+                'port[list, inspect, or release ports]' \
+                'service[list, inspect, or control services]' \
+                'svc[alias for service]' \
+                'log[query journal entries]' \
+                'inspect[inspect a related resource graph]' \
+                'find[search observable resources]' \
+                'doctor[check LX capabilities]' \
+                'tui[open the interactive dashboard]'
+            ;;
+        arguments)
+            case ${line[1]} in
+                process)
+                    _arguments \
+                        '--name=[filter by exact process name]:name:' \
+                        '--user=[filter by user name or UID]:user or UID:' \
+                        '--service=[filter by systemd service]:service:' \
+                        '--raw-command[show command without secret redaction]' \
+                        '--json[write stable machine-readable JSON]' \
+                        '--quiet[suppress non-essential diagnostics]' \
+                        '--no-color[disable ANSI color output]' \
+                        '1:PID or action:(stop kill)' \
+                        '2:process ID:' \
+                        '--yes[skip SIGKILL confirmation]'
+                    ;;
+                port)
+                    _arguments \
+                        '1:port or action:(free)' \
+                        '2:local port:' \
+                        '--yes[skip release confirmations]' \
+                        '--json[write stable machine-readable JSON]' \
+                        '--quiet[suppress non-essential diagnostics]' \
+                        '--no-color[disable ANSI color output]'
+                    ;;
+                service|svc)
+                    _arguments \
+                        '1:service unit:' \
+                        '2:action:(start stop restart)' \
+                        '--yes[skip stop or restart confirmation]' \
+                        '--json[write stable machine-readable JSON]' \
+                        '--quiet[suppress non-essential diagnostics]' \
+                        '--no-color[disable ANSI color output]'
+                    ;;
+                log)
+                    _arguments \
+                        '1:service unit:' \
+                        '--pid=[filter by process ID]:PID:' \
+                        '--lines=[maximum journal entries]:count:' \
+                        '--since=[start timestamp or duration]:time:' \
+                        '--follow[follow new journal entries]' \
+                        '--json[write JSON or NDJSON]' \
+                        '--quiet[suppress non-essential diagnostics]' \
+                        '--no-color[disable ANSI color output]'
+                    ;;
+                inspect)
+                    _arguments '1:resource (port\:, pid\:, or service\:):'
+                    ;;
+                find)
+                    _arguments '1:search query:'
+                    ;;
+                status|doctor)
+                    _arguments \
+                        '--json[write stable machine-readable JSON]' \
+                        '--quiet[suppress non-essential diagnostics]' \
+                        '--no-color[disable ANSI color output]'
+                    ;;
+            esac
+            ;;
+    esac
+}
+
+_lx "$@"
