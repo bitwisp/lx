@@ -3,6 +3,7 @@ add_executable(
     integration/process/signal_provider_test.cpp
     integration/socket/socket_ownership_test.cpp
     unit/application/doctor_service_test.cpp
+    unit/application/journal_provider_contract_test.cpp
     unit/application/process_service_test.cpp
     unit/application/service_provider_contract_test.cpp
     unit/application/service_service_test.cpp

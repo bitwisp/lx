@@ -86,6 +86,7 @@ add_library(lx_warnings INTERFACE)
 lx_set_project_warnings(lx_warnings)
 
 add_library(lx_linux STATIC
+    src/linux/systemd/UnavailableJournalProvider.cpp
     src/linux/systemd/UnavailableServiceProvider.cpp
     src/linux/process/LinuxSignalProvider.cpp
     src/linux/process/PidFd.cpp
