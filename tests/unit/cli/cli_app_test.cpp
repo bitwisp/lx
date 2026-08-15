@@ -29,13 +29,19 @@ public:
 
 class FakeSocketProvider final : public lx::contracts::ISocketProvider {
 public:
+    explicit FakeSocketProvider(const int& releaseStage)
+        : releaseStage_(releaseStage) {}
+
     lx::Result<lx::Observation<std::vector<lx::SocketInfo>>> query(const lx::SocketQuery& query) const override {
         std::vector<lx::SocketInfo> values;
-        if (!query.localPort || *query.localPort == 8080) { lx::SocketInfo socket; socket.local={"127.0.0.1",8080};socket.state="listen";socket.uid=1000;socket.inode=42;values.push_back(socket); }
+        if (releaseStage_ < 2 && (!query.localPort || *query.localPort == 8080)) { lx::SocketInfo socket; socket.local={"127.0.0.1",8080};socket.state="listen";socket.uid=1000;socket.inode=42;values.push_back(socket); }
         if (!query.localPort || *query.localPort == 9090) { lx::SocketInfo socket; socket.local={"0.0.0.0",9090};socket.state="listen";socket.uid=1000;socket.inode=99;values.push_back(socket); }
         if (!query.localPort || *query.localPort == 9091) { lx::SocketInfo socket; socket.local={"0.0.0.0",9091};socket.state="listen";socket.uid=1000;socket.inode=100;values.push_back(socket); }
         return lx::Result<lx::Observation<std::vector<lx::SocketInfo>>>::success({std::move(values),{}});
     }
+
+private:
+    const int& releaseStage_;
 };
 
 class FakeSocketOwnerResolver final
@@ -51,9 +57,13 @@ public:
 
 class FakeSignalProvider final : public lx::contracts::ISignalProvider {
 public:
+    explicit FakeSignalProvider(int& releaseStage)
+        : releaseStage_(releaseStage) {}
+
     lx::Result<lx::SignalDelivery> send(
         const pid_t pid, const lx::ProcessSignal signal) const override
     {
+        releaseStage_ = signal == lx::ProcessSignal::Terminate ? 1 : 2;
         return lx::Result<lx::SignalDelivery>::success(
             {pid, signal, lx::SignalMechanism::PidFd});
     }
@@ -63,6 +73,9 @@ public:
         return lx::Result<bool>::success(true);
     }
     lx::SignalCapabilities capabilities() const override { return {true, true}; }
+
+private:
+    int& releaseStage_;
 };
 
 struct CliResult {
@@ -83,11 +96,12 @@ CliResult runCli(std::vector<std::string> arguments,
     std::ostringstream output;
     std::ostringstream error;
     std::istringstream input{inputText};
+    int releaseStage = 0;
     const FakeProcessProvider provider;
-    const FakeSignalProvider signalProvider;
+    const FakeSignalProvider signalProvider{releaseStage};
     const lx::application::ProcessService processService{
         provider, signalProvider, 999};
-    const FakeSocketProvider socketProvider;
+    const FakeSocketProvider socketProvider{releaseStage};
     const FakeSocketOwnerResolver socketOwnerResolver;
     const lx::application::DoctorService doctorService{provider, socketProvider};
     const lx::application::PortService portService{
@@ -104,6 +118,31 @@ TEST_CASE("CLI lists and filters ports") {
 }
 
 TEST_CASE("CLI validates port range") { REQUIRE(runCli({"lx","port","0"}).exitCode==2); REQUIRE(runCli({"lx","port","65536"}).exitCode==2); }
+
+TEST_CASE("CLI confirms graceful and forced port release")
+{
+    const auto cancelled = runCli({"lx", "port", "free", "8080"}, "\n");
+    REQUIRE(cancelled.exitCode == 0);
+    REQUIRE(cancelled.output.find("Port is still occupied") != std::string::npos);
+    REQUIRE(cancelled.output.find("Cancelled.") != std::string::npos);
+
+    const auto forced = runCli(
+        {"lx", "port", "free", "8080"}, "\nyes\n");
+    REQUIRE(forced.exitCode == 0);
+    REQUIRE(forced.output.find("released with SIGKILL") != std::string::npos);
+
+    const auto assumed = runCli(
+        {"lx", "port", "free", "8080", "--yes"});
+    REQUIRE(assumed.exitCode == 0);
+    REQUIRE(assumed.output.find("released with SIGKILL") != std::string::npos);
+}
+
+TEST_CASE("CLI refuses to free ports with unresolved owners")
+{
+    const auto result = runCli({"lx", "port", "free", "9091", "--yes"});
+    REQUIRE(result.exitCode == 4);
+    REQUIRE(result.error.find("unresolved") != std::string::npos);
+}
 
 TEST_CASE("CLI prints process details with secrets redacted")
 {

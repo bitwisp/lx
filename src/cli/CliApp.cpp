@@ -140,6 +140,27 @@ std::string ownerPids(const PortInfo& port)
     return joined.str();
 }
 
+std::string processName(const PortReleasePlan& plan, const pid_t pid)
+{
+    for (const auto& port : plan.ports) {
+        const auto owner = std::find_if(
+            port.owners.begin(), port.owners.end(),
+            [pid](const ProcessInfo& process) { return process.pid == pid; });
+        if (owner != port.owners.end()) return owner->name;
+    }
+    return "<unavailable>";
+}
+
+void printReleasePlan(const PortReleasePlan& plan, std::ostream& output)
+{
+    output << fmt::format("Port {} is owned by:\n\n", plan.localPort);
+    output << "PID      PROCESS\n";
+    for (const auto pid : plan.ownerPids) {
+        output << fmt::format("{:<8} {}\n", pid, processName(plan, pid));
+    }
+    output << '\n';
+}
+
 void printProcess(const Observation<ProcessInfo>& observed, const bool raw,
                   std::ostream& output)
 {
@@ -214,6 +235,13 @@ int CliApp::run(
     auto* port = app.add_subcommand("port", "List listening ports");
     std::uint32_t portNumber = 0;
     auto* portOption = port->add_option("port", portNumber, "Local port")->check(CLI::Range(1, 65535));
+    auto* freePort = port->add_subcommand("free", "Release a listening port");
+    std::uint32_t freePortNumber = 0;
+    bool confirmRelease = false;
+    freePort->add_option("port", freePortNumber, "Local port")
+        ->required()->check(CLI::Range(1, 65535));
+    freePort->add_flag("--yes", confirmRelease,
+                       "Skip SIGTERM and SIGKILL confirmations");
 
     try {
         app.parse(argc, argv);
@@ -264,6 +292,52 @@ int CliApp::run(
                 return exitCode(result.error().code);
             }
             printProcess(result.value(), rawCommand, output);
+        } else if (*freePort) {
+            auto plan = portService_.prepareRelease(
+                static_cast<std::uint16_t>(freePortNumber));
+            if (!plan) {
+                error << plan.error().message << '\n';
+                return exitCode(plan.error().code);
+            }
+            printReleasePlan(plan.value().value, output);
+            if (!confirmRelease && !confirm(
+                    input, output, "Send SIGTERM to all owners? [Y/n] ", true)) {
+                output << "Cancelled.\n";
+                return 0;
+            }
+
+            auto terminated = portService_.terminate(plan.value().value);
+            if (!terminated) {
+                error << terminated.error().message << '\n';
+                return exitCode(terminated.error().code);
+            }
+            for (const auto& warning : terminated.value().warnings) {
+                error << "Warning: " << warning.message << '\n';
+            }
+            if (terminated.value().value.released) {
+                output << fmt::format("Port {} released with SIGTERM.\n",
+                                      freePortNumber);
+                return 0;
+            }
+
+            output << "Port is still occupied.\n";
+            if (!confirmRelease && !confirm(
+                    input, output,
+                    "Force remaining owners with SIGKILL? [y/N] ", false)) {
+                output << "Cancelled.\n";
+                return 0;
+            }
+            auto forced = portService_.force(
+                *terminated.value().value.remaining);
+            if (!forced) {
+                error << forced.error().message << '\n';
+                return exitCode(forced.error().code);
+            }
+            for (const auto& warning : forced.value().warnings) {
+                error << "Warning: " << warning.message << '\n';
+            }
+            output << fmt::format("Port {} released with SIGKILL.\n",
+                                  freePortNumber);
         } else if (*port) {
             SocketQuery query;
             if (portOption->count() != 0) query.localPort = static_cast<std::uint16_t>(portNumber);
