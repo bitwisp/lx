@@ -376,3 +376,55 @@ cmake --preset tsan
 cmake --build --preset tsan
 ctest --preset tsan
 ```
+
+## Phase 10A installation and Debian packages
+
+LX installs according to the standard GNU/Linux filesystem layout:
+
+```text
+/usr/bin/lx
+/usr/share/man/man1/lx.1
+/usr/share/bash-completion/completions/lx
+/usr/share/zsh/site-functions/_lx
+/usr/share/fish/vendor_completions.d/lx.fish
+/usr/share/doc/lx/
+```
+
+The normal `debug` and `release` presets remain unchanged. The dedicated
+`package-release` preset builds version `0.1.0` in Release mode with LTO and
+TUI support enabled:
+
+```bash
+cmake --preset package-release
+cmake --build --preset package-release
+ctest --preset package-release
+cpack --config build/package-release/CPackConfig.cmake -G DEB
+```
+
+The package is generated under `build/package-release/packages` together with
+its SHA-256 checksum. CPack invokes `dpkg-shlibdeps` to derive the actual libc,
+libstdc++, and libsystemd runtime constraints from the binary. FTXUI is linked
+into LX and is not a separate runtime dependency.
+
+Inspect or install the package on Debian or Ubuntu with:
+
+```bash
+dpkg-deb --info build/package-release/packages/lx-resource-manager_0.1.0_*.deb
+dpkg-deb --contents build/package-release/packages/lx-resource-manager_0.1.0_*.deb
+sudo apt install ./build/package-release/packages/lx-resource-manager_0.1.0_*.deb
+```
+
+`install_layout` installs into an isolated build directory and runs the staged
+binary. In `package-release`, `deb_package` additionally generates, inspects,
+extracts, and runs the DEB without modifying the host package database. CI
+publishes the tested DEB and checksum as one artifact.
+
+An unpackaged staging install can be tested with:
+
+```bash
+cmake --install build/package-release --prefix build/staging
+./build/staging/bin/lx --version
+```
+
+RPM, package upgrade tests, benchmarks, release security review, configuration
+files, and service reload/enable/disable remain Phase 10B work.

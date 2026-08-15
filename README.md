@@ -60,6 +60,32 @@ It provides live Services, Ports, and Processes panels plus inspect, find,
 logs, and confirmed service/process actions. The normal presets remain free of
 the FTXUI dependency.
 
+## Install and DEB package
+
+Create the release package with TUI, LTO, the manual page, and Bash/Zsh/Fish
+completion:
+
+```bash
+cmake --preset package-release
+cmake --build --preset package-release
+ctest --preset package-release
+cpack --config build/package-release/CPackConfig.cmake -G DEB
+```
+
+The package and SHA-256 checksum are written to
+`build/package-release/packages`. Install the generated package on Debian or
+Ubuntu with:
+
+```bash
+sudo apt install ./build/package-release/packages/lx-resource-manager_0.1.0_*.deb
+lx --version
+lx doctor
+lx tui
+```
+
+CPack derives runtime dependencies from the release binary; FTXUI is linked
+into LX and does not require a separate runtime package.
+
 ## Unified resources
 
 Inspect and search related ports, processes, services, and recent logs:
