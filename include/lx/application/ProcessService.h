@@ -7,11 +7,14 @@
 
 namespace lx::application {
 
+class ServiceService;
+
 class ProcessService final {
 public:
     ProcessService(const contracts::IProcessProvider& processProvider,
                    const contracts::ISignalProvider& signalProvider,
-                   pid_t selfPid) noexcept;
+                   pid_t selfPid,
+                   const ServiceService* serviceService = nullptr) noexcept;
 
     [[nodiscard]] Result<Observation<ProcessInfo>> inspect(pid_t pid) const;
     [[nodiscard]] Result<SignalDelivery> stop(pid_t pid) const;
@@ -28,6 +31,7 @@ private:
     const contracts::IProcessProvider& processProvider_;
     const contracts::ISignalProvider& signalProvider_;
     pid_t selfPid_;
+    const ServiceService* serviceService_;
 };
 
 } // namespace lx::application

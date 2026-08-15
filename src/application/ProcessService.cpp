@@ -1,13 +1,15 @@
 #include "lx/application/ProcessService.h"
+#include "lx/application/ServiceService.h"
 
 namespace lx::application {
 
 ProcessService::ProcessService(
     const contracts::IProcessProvider& processProvider,
     const contracts::ISignalProvider& signalProvider,
-    const pid_t selfPid) noexcept
+    const pid_t selfPid,
+    const ServiceService* serviceService) noexcept
     : processProvider_(processProvider), signalProvider_(signalProvider),
-      selfPid_(selfPid)
+      selfPid_(selfPid), serviceService_(serviceService)
 {
 }
 
@@ -22,7 +24,19 @@ Result<Observation<ProcessInfo>> ProcessService::inspect(const pid_t pid) const
             "inspect",
         });
     }
-    return processProvider_.get(pid);
+    auto observed = processProvider_.get(pid);
+    if (!observed || serviceService_ == nullptr) return observed;
+
+    auto unit = serviceService_->unitByPid(pid);
+    if (unit) {
+        observed.value().value.systemdUnit = std::move(unit).value();
+    } else if (unit.error().code != ErrorCode::Unavailable &&
+               unit.error().code != ErrorCode::NotFound) {
+        observed.value().warnings.push_back(
+            {unit.error().code, unit.error().message, unit.error().systemError,
+             unit.error().component, unit.error().operation});
+    }
+    return observed;
 }
 
 Result<SignalDelivery> ProcessService::stop(const pid_t pid) const

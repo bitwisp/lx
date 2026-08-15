@@ -1,4 +1,5 @@
 #include "lx/application/ProcessService.h"
+#include "lx/application/ServiceService.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -43,6 +44,43 @@ public:
     mutable pid_t waitedPid = -1;
 };
 
+class FakeServiceProvider final : public lx::contracts::IServiceProvider {
+public:
+    lx::Result<void> probe() const override { return lx::Result<void>::success(); }
+    lx::Result<lx::Observation<std::vector<lx::ServiceInfo>>> list()
+        const override
+    {
+        return lx::Result<lx::Observation<std::vector<lx::ServiceInfo>>>::success(
+            {{}, {}});
+    }
+    lx::Result<lx::Observation<lx::ServiceInfo>> get(
+        const std::string&) const override
+    {
+        return lx::Result<lx::Observation<lx::ServiceInfo>>::failure(
+            {lx::ErrorCode::NotFound, "missing", 0, "fake", "get"});
+    }
+    lx::Result<std::optional<std::string>> unitByPid(pid_t pid) const override
+    {
+        if (pid == 43) {
+            return lx::Result<std::optional<std::string>>::success(std::nullopt);
+        }
+        return lx::Result<std::optional<std::string>>::success(
+            std::string{"demo.service"});
+    }
+    lx::Result<void> start(const std::string&) const override
+    {
+        return lx::Result<void>::success();
+    }
+    lx::Result<void> stop(const std::string&) const override
+    {
+        return lx::Result<void>::success();
+    }
+    lx::Result<void> restart(const std::string&) const override
+    {
+        return lx::Result<void>::success();
+    }
+};
+
 } // namespace
 
 TEST_CASE("ProcessService delegates valid process inspection")
@@ -55,6 +93,24 @@ TEST_CASE("ProcessService delegates valid process inspection")
 
     REQUIRE(result);
     REQUIRE(result.value().value.pid == 42);
+}
+
+TEST_CASE("ProcessService associates process with a systemd service")
+{
+    const FakeProcessProvider provider;
+    const FakeSignalProvider signals;
+    const FakeServiceProvider serviceProvider;
+    const lx::application::ServiceService services{serviceProvider};
+    const lx::application::ProcessService service{
+        provider, signals, 99, &services};
+
+    const auto managed = service.inspect(42);
+    const auto unmanaged = service.inspect(43);
+
+    REQUIRE(managed);
+    REQUIRE(managed.value().value.systemdUnit == "demo.service");
+    REQUIRE(unmanaged);
+    REQUIRE_FALSE(unmanaged.value().value.systemdUnit);
 }
 
 TEST_CASE("ProcessService rejects non-positive PIDs")

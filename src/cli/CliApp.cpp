@@ -179,6 +179,8 @@ void printProcess(const Observation<ProcessInfo>& observed, const bool raw,
                           process.cwd.value_or("<unavailable>"));
     output << "\nCommand\n  "
            << joinArguments(displayedArguments(process.argv, raw)) << '\n';
+    output << "\nService\n  "
+           << process.systemdUnit.value_or("<none>") << '\n';
     if (!observed.warnings.empty()) {
         output << "\nWarnings\n";
         for (const auto& warning : observed.warnings) output << "  " << warning.message << '\n';

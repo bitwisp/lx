@@ -153,16 +153,16 @@ CliResult runCli(std::vector<std::string> arguments,
     int releaseStage = 0;
     const FakeProcessProvider provider;
     const FakeSignalProvider signalProvider{releaseStage};
+    const FakeServiceProvider serviceProvider;
+    const lx::application::ServiceService serviceService{serviceProvider};
     const lx::application::ProcessService processService{
-        provider, signalProvider, 999};
+        provider, signalProvider, 999, &serviceService};
     const FakeSocketProvider socketProvider{releaseStage};
     const FakeSocketOwnerResolver socketOwnerResolver;
     const lx::application::DoctorService doctorService{
         provider, socketProvider, signalProvider};
     const lx::application::PortService portService{
         socketProvider, socketOwnerResolver, processService};
-    const FakeServiceProvider serviceProvider;
-    const lx::application::ServiceService serviceService{serviceProvider};
     const auto exitCode = lx::cli::CliApp{doctorService, processService,
                                          portService, serviceService}.run(
         static_cast<int>(argv.size()), argv.data(), input, output, error);
