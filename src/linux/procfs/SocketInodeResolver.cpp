@@ -86,7 +86,17 @@ Result<Observation<SocketOwnership>> SocketInodeResolver::resolve(
     SocketOwnership ownership;
     std::size_t deniedCount = 0;
     std::size_t unreadableCount = 0;
-    for (const auto& process : processes) {
+    const std::filesystem::directory_iterator end;
+    while (processes != end) {
+        const auto process = *processes;
+        error.clear();
+        processes.increment(error);
+        if (error) {
+            if (denied(error)) ++deniedCount;
+            else if (!disappeared(error)) ++unreadableCount;
+            processes = end;
+        }
+
         const auto pid = parsePid(process.path().filename().string());
         if (!pid) continue;
 
@@ -99,7 +109,16 @@ Result<Observation<SocketOwnership>> SocketInodeResolver::resolve(
             continue;
         }
 
-        for (const auto& descriptor : descriptors) {
+        while (descriptors != end) {
+            const auto descriptor = *descriptors;
+            error.clear();
+            descriptors.increment(error);
+            if (error) {
+                if (denied(error)) ++deniedCount;
+                else if (!disappeared(error)) ++unreadableCount;
+                descriptors = end;
+            }
+
             error.clear();
             const auto target = std::filesystem::read_symlink(
                 descriptor.path(), error);
