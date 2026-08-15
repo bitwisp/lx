@@ -63,6 +63,14 @@
       "cacheVariables": {
         "LX_BUILD_TUI": "ON"
       }
+    },
+    {
+      "name": "tsan",
+      "displayName": "ThreadSanitizer with TUI",
+      "inherits": "tui-debug",
+      "cacheVariables": {
+        "LX_ENABLE_TSAN": "ON"
+      }
     }
   ],
   "buildPresets": [
@@ -72,6 +80,7 @@
     { "name": "ubsan", "configurePreset": "ubsan" }
     ,{ "name": "tui-debug", "configurePreset": "tui-debug" }
     ,{ "name": "tui-release", "configurePreset": "tui-release" }
+    ,{ "name": "tsan", "configurePreset": "tsan" }
   ],
   "testPresets": [
     {
@@ -102,6 +111,11 @@
     {
       "name": "tui-release",
       "configurePreset": "tui-release",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "tsan",
+      "configurePreset": "tsan",
       "output": { "outputOnFailure": true }
     }
   ]
