@@ -6,6 +6,7 @@
 #include "lx/application/PortService.h"
 #include "lx/application/ServiceService.h"
 #include "lx/application/LogService.h"
+#include "lx/application/InspectService.h"
 
 #include <CLI/CLI.hpp>
 #include <fmt/format.h>
@@ -21,6 +22,7 @@
 #include <ctime>
 #include <iomanip>
 #include <sstream>
+#include <type_traits>
 
 namespace lx::cli {
 
@@ -421,6 +423,58 @@ void printService(const Observation<ServiceInfo>& observed,
     }
 }
 
+void printResourceGraph(const ResourceGraph& graph, std::ostream& output,
+                        std::ostream& error)
+{
+    std::visit([&output](const auto& root) {
+        using Root = std::decay_t<decltype(root)>;
+        if constexpr (std::is_same<Root, PortTarget>::value) {
+            output << fmt::format("Port {}\n", root.port);
+        } else if constexpr (std::is_same<Root, ProcessTarget>::value) {
+            output << fmt::format("Process {}\n", root.pid);
+        } else {
+            output << root.unit << '\n';
+        }
+    }, graph.root);
+
+    if (!graph.ports.empty()) {
+        output << "\nPorts\n";
+        for (const auto& port : graph.ports) {
+            output << fmt::format(
+                "  {} {}:{} {:<10} PID {}\n",
+                port.socket.protocol == TransportProtocol::Tcp ? "TCP" : "UDP",
+                port.socket.local.address, port.socket.local.port,
+                port.socket.state, ownerPids(port));
+        }
+    }
+    if (!graph.processes.empty()) {
+        output << "\nProcesses\n";
+        for (const auto& process : graph.processes) {
+            output << fmt::format(
+                "  {:<8} {:<24} {:<14} {}\n", process.pid,
+                shortened(process.name, 24), shortened(process.state, 14),
+                process.user);
+        }
+    }
+    if (!graph.services.empty()) {
+        output << "\nServices\n";
+        for (const auto& service : graph.services) {
+            output << fmt::format("  {:<40} {} / {}\n",
+                                  shortened(service.unitName, 40),
+                                  service.activeState, service.subState);
+        }
+    }
+    if (!graph.recentLogs.empty()) {
+        output << "\nRecent logs\n";
+        for (const auto& entry : graph.recentLogs) {
+            printJournalEntry({entry, {}}, output, error);
+        }
+    }
+    for (const auto& warning : graph.warnings) {
+        error << "Warning: " << warning.message << '\n';
+    }
+}
+
 int exitCode(const ErrorCode code)
 {
     switch (code) {
@@ -441,10 +495,11 @@ CliApp::CliApp(const application::DoctorService& doctorService,
                const application::ProcessService& processService,
                const application::PortService& portService,
                const application::ServiceService& serviceService,
-               const application::LogService& logService) noexcept
+               const application::LogService& logService,
+               const application::InspectService& inspectService) noexcept
     : doctorService_(doctorService), processService_(processService),
       portService_(portService), serviceService_(serviceService),
-      logService_(logService)
+      logService_(logService), inspectService_(inspectService)
 {
 }
 
@@ -524,11 +579,23 @@ int CliApp::run(
     bool followLog = false;
     log->add_flag("--follow", followLog,
                   "Show recent entries and follow new journal entries");
+    auto* inspect = app.add_subcommand(
+        "inspect", "Inspect a port, PID, service, or untyped resource");
+    std::string inspectExpression;
+    inspect->add_option("resource", inspectExpression, "Resource expression")
+        ->required();
 
     try {
         app.parse(argc, argv);
         if (*doctor) {
             printDoctorReport(doctorService_.inspect(), output);
+        } else if (*inspect) {
+            const auto result = inspectService_.inspect(inspectExpression);
+            if (!result) {
+                error << result.error().message << '\n';
+                return exitCode(result.error().code);
+            }
+            printResourceGraph(result.value(), output, error);
         } else if (*stopProcess) {
             const auto result = processService_.stop(stopPid);
             if (!result) {

@@ -4,6 +4,8 @@
 #include "lx/application/PortService.h"
 #include "lx/application/ServiceService.h"
 #include "lx/application/LogService.h"
+#include "lx/application/InspectService.h"
+#include "lx/application/ResourceResolver.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -237,9 +239,13 @@ CliResult runCli(std::vector<std::string> arguments,
         journalProvider};
     const lx::application::PortService portService{
         socketProvider, socketOwnerResolver, processService, &serviceService};
+    const lx::application::ResourceResolver resolver{
+        portService, processService, serviceService};
+    const lx::application::InspectService inspectService{
+        resolver, portService, processService, serviceService, logService};
     const auto exitCode = lx::cli::CliApp{doctorService, processService,
                                          portService, serviceService,
-                                         logService}.run(
+                                         logService, inspectService}.run(
         static_cast<int>(argv.size()), argv.data(), input, output, error);
     return {exitCode, output.str(), error.str()};
 }
@@ -248,6 +254,20 @@ TEST_CASE("CLI lists and filters ports") {
     const auto all=runCli({"lx","port"}); REQUIRE(all.exitCode==0); REQUIRE(all.output.find("127.0.0.1")!=std::string::npos); REQUIRE(all.output.find("demo,worker")!=std::string::npos); REQUIRE(all.output.find("10,20")!=std::string::npos); REQUIRE(all.output.find("demo.service")!=std::string::npos); REQUIRE(all.output.find("unresolved")!=std::string::npos);
     const auto unavailable=runCli({"lx","port","9090"}); REQUIRE(unavailable.output.find("<unavailable>")!=std::string::npos); REQUIRE(unavailable.output.find("404")!=std::string::npos);
     REQUIRE(runCli({"lx","port","9999"}).exitCode==3);
+}
+
+TEST_CASE("CLI inspects typed resources and reports ambiguity")
+{
+    const auto port = runCli({"lx", "inspect", "port:8080"});
+    REQUIRE(port.exitCode == 0);
+    CHECK(port.output.find("Port 8080") != std::string::npos);
+    CHECK(port.output.find("Processes") != std::string::npos);
+    CHECK(port.output.find("Services") != std::string::npos);
+    CHECK(port.output.find("Recent logs") != std::string::npos);
+
+    const auto ambiguous = runCli({"lx", "inspect", "8080"});
+    REQUIRE(ambiguous.exitCode == 7);
+    CHECK(ambiguous.error.find("port:8080") != std::string::npos);
 }
 
 TEST_CASE("CLI validates port range") { REQUIRE(runCli({"lx","port","0"}).exitCode==2); REQUIRE(runCli({"lx","port","65536"}).exitCode==2); }

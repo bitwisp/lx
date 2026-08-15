@@ -4,6 +4,8 @@
 #include "lx/application/PortService.h"
 #include "lx/application/ServiceService.h"
 #include "lx/application/LogService.h"
+#include "lx/application/InspectService.h"
+#include "lx/application/ResourceResolver.h"
 #if LX_HAS_SYSTEMD
 #include "lx/linux/systemd/SystemdJournalProvider.h"
 #include "lx/linux/systemd/SystemdServiceProvider.h"
@@ -43,7 +45,12 @@ int main(const int argc, char** argv)
     const lx::application::DoctorService doctorService{
         processProvider, socketProvider, signalProvider, serviceProvider,
         journalProvider};
+    const lx::application::ResourceResolver resourceResolver{
+        portService, processService, serviceService};
+    const lx::application::InspectService inspectService{
+        resourceResolver, portService, processService, serviceService,
+        logService};
     return lx::cli::CliApp{doctorService, processService, portService,
-                           serviceService, logService}.run(
+                           serviceService, logService, inspectService}.run(
         argc, argv, std::cin, std::cout, std::cerr);
 }
