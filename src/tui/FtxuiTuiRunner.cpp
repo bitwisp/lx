@@ -236,6 +236,12 @@ Result<void> FtxuiTuiRunner::run()
         const char* tabs[] = {"Services", "Ports", "Processes"};
         bool searching = false;
         bool help = false;
+        enum class PendingAction { None, StopService, RestartService,
+                                   TerminateProcess, KillProcess };
+        PendingAction pendingAction = PendingAction::None;
+        int confirmationStep = 0;
+        std::string actionTarget;
+        pid_t actionPid = -1;
         std::string searchQuery;
         auto searchInput = Input(&searchQuery, "name, PID, port, path...");
         TaskWorker tasks{[&screen] { screen.PostEvent(Event::Custom); }};
@@ -270,7 +276,25 @@ Result<void> FtxuiTuiRunner::run()
                 }
                 rows.push_back(hbox(std::move(tabElements)));
                 const auto taskResult = tasks.result();
-                if (help) {
+                if (pendingAction != PendingAction::None) {
+                    const auto action = pendingAction == PendingAction::StopService
+                                            ? "Stop service"
+                                        : pendingAction == PendingAction::RestartService
+                                            ? "Restart service"
+                                        : pendingAction == PendingAction::TerminateProcess
+                                            ? "Send SIGTERM to process"
+                                            : "Send SIGKILL to process";
+                    const auto warning = pendingAction == PendingAction::KillProcess &&
+                                                 confirmationStep == 2
+                                             ? "FINAL CONFIRMATION: this cannot be undone"
+                                             : "Confirm the selected action";
+                    rows.push_back(vbox({text(action) | bold,
+                                         text(actionTarget),
+                                         separator(),
+                                         text(warning) | color(Color::Yellow),
+                                         text("Press y to continue or n/Esc to cancel")}) |
+                                   border | center | flex);
+                } else if (help) {
                     rows.push_back(vbox({text("Keyboard help") | bold,
                         text("Tab/Left/Right  switch panel"),
                         text("Up/Down         select resource"),
@@ -297,7 +321,7 @@ Result<void> FtxuiTuiRunner::run()
                                border);
             }
             rows.push_back(separator());
-            rows.push_back(text(" Tab switch panel   arrows select   Enter inspect   / find   l logs   F1 help   q quit ") | dim);
+            rows.push_back(text(" Tab/arrows navigate  Enter inspect  / find  l logs  s/r service  k/K process  F1 help  q quit ") | dim);
             return vbox(std::move(rows)) | border;
         });
         auto root = CatchEvent(content, [&](const Event& event) {
@@ -309,6 +333,43 @@ Result<void> FtxuiTuiRunner::run()
                 searching = false;
                 return true;
             }
+            if (pendingAction != PendingAction::None &&
+                (event == Event::Character('n') || event == Event::Escape)) {
+                pendingAction = PendingAction::None;
+                confirmationStep = 0;
+                return true;
+            }
+            if (pendingAction != PendingAction::None &&
+                event == Event::Character('y')) {
+                if (pendingAction == PendingAction::KillProcess &&
+                    confirmationStep == 1) {
+                    confirmationStep = 2;
+                    return true;
+                }
+                const auto action = pendingAction;
+                const auto unit = actionTarget;
+                const auto pid = actionPid;
+                pendingAction = PendingAction::None;
+                confirmationStep = 0;
+                tasks.submit([this, action, unit, pid] {
+                    if (action == PendingAction::StopService ||
+                        action == PendingAction::RestartService) {
+                        const auto result = action == PendingAction::StopService
+                                                ? services_.stop(unit)
+                                                : services_.restart(unit);
+                        return result ? std::string{"Service action submitted for "} + unit
+                                      : std::string{"Service action failed: "} +
+                                            result.error().message;
+                    }
+                    const auto result = action == PendingAction::TerminateProcess
+                                            ? processes_.stop(pid)
+                                            : processes_.kill(pid);
+                    return result ? std::string{"Signal sent to PID "} + std::to_string(pid)
+                                  : std::string{"Signal failed: "} + result.error().message;
+                });
+                return true;
+            }
+            if (pendingAction != PendingAction::None) return true;
             if (event == Event::Escape && (searching || help || !tasks.result().empty())) {
                 searching = false;
                 help = false;
@@ -343,6 +404,35 @@ Result<void> FtxuiTuiRunner::run()
                 return true;
             }
             const auto snapshot = worker.snapshot();
+            if (!searching && snapshot && tab == 0 &&
+                (event == Event::Character('s') ||
+                 event == Event::Character('r')) &&
+                selected[tab] < itemCount(*snapshot, tab)) {
+                const auto& service = snapshot->services[
+                    static_cast<std::size_t>(selected[tab])];
+                pendingAction = event == Event::Character('s')
+                                    ? PendingAction::StopService
+                                    : PendingAction::RestartService;
+                actionTarget = service.unitName;
+                confirmationStep = 1;
+                tasks.clear();
+                return true;
+            }
+            if (!searching && snapshot && tab == 2 &&
+                (event == Event::Character('k') ||
+                 event == Event::Character('K')) &&
+                selected[tab] < itemCount(*snapshot, tab)) {
+                const auto& process = snapshot->processes[
+                    static_cast<std::size_t>(selected[tab])];
+                pendingAction = event == Event::Character('k')
+                                    ? PendingAction::TerminateProcess
+                                    : PendingAction::KillProcess;
+                actionPid = process.pid;
+                actionTarget = fmt::format("PID {} ({})", process.pid, process.name);
+                confirmationStep = 1;
+                tasks.clear();
+                return true;
+            }
             if (!searching && snapshot && event == Event::Return) {
                 const auto resource = selectedResource(*snapshot, tab, selected[tab]);
                 if (!resource.empty()) {
