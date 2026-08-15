@@ -220,6 +220,11 @@ install(
     DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/zsh/site-functions"
     COMPONENT completion
 )
+install(
+    FILES completions/lx.fish
+    DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/fish/vendor_completions.d"
+    COMPONENT completion
+)
 
 if(LX_ENABLE_LTO)
     include(CheckIPOSupported)

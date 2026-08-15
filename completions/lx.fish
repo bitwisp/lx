@@ -1,0 +1,35 @@
+complete -c lx -f
+complete -c lx -l json -d 'Write stable machine-readable JSON'
+complete -c lx -l quiet -d 'Suppress non-essential diagnostics'
+complete -c lx -l no-color -d 'Disable ANSI color output'
+complete -c lx -l version -d 'Show version'
+complete -c lx -s h -l help -d 'Show help'
+
+complete -c lx -n '__fish_use_subcommand' -a status -d 'Show host CPU, memory, and uptime'
+complete -c lx -n '__fish_use_subcommand' -a process -d 'List, inspect, or signal processes'
+complete -c lx -n '__fish_use_subcommand' -a port -d 'List, inspect, or release ports'
+complete -c lx -n '__fish_use_subcommand' -a service -d 'List, inspect, or control services'
+complete -c lx -n '__fish_use_subcommand' -a svc -d 'Alias for service'
+complete -c lx -n '__fish_use_subcommand' -a log -d 'Query journal entries'
+complete -c lx -n '__fish_use_subcommand' -a inspect -d 'Inspect a related resource graph'
+complete -c lx -n '__fish_use_subcommand' -a find -d 'Search observable resources'
+complete -c lx -n '__fish_use_subcommand' -a doctor -d 'Check LX capabilities'
+complete -c lx -n '__fish_use_subcommand' -a tui -d 'Open the interactive dashboard'
+
+complete -c lx -n '__fish_seen_subcommand_from process' -a 'stop kill'
+complete -c lx -n '__fish_seen_subcommand_from process' -l name -r -d 'Filter by exact process name'
+complete -c lx -n '__fish_seen_subcommand_from process' -l user -r -d 'Filter by user name or UID'
+complete -c lx -n '__fish_seen_subcommand_from process' -l service -r -d 'Filter by systemd service'
+complete -c lx -n '__fish_seen_subcommand_from process' -l raw-command -d 'Disable command secret redaction'
+complete -c lx -n '__fish_seen_subcommand_from process; and contains kill (commandline -opc)' -l yes -d 'Skip SIGKILL confirmation'
+
+complete -c lx -n '__fish_seen_subcommand_from port' -a free -d 'Release a listening port'
+complete -c lx -n '__fish_seen_subcommand_from port; and contains free (commandline -opc)' -l yes -d 'Skip release confirmations'
+
+complete -c lx -n '__fish_seen_subcommand_from service svc' -a 'start stop restart'
+complete -c lx -n '__fish_seen_subcommand_from service svc' -l yes -d 'Skip stop or restart confirmation'
+
+complete -c lx -n '__fish_seen_subcommand_from log' -l pid -r -d 'Filter by process ID'
+complete -c lx -n '__fish_seen_subcommand_from log' -l lines -r -d 'Maximum journal entries'
+complete -c lx -n '__fish_seen_subcommand_from log' -l since -r -d 'Start timestamp or duration'
+complete -c lx -n '__fish_seen_subcommand_from log' -l follow -d 'Follow new journal entries'
