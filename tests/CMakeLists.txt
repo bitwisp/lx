@@ -5,6 +5,7 @@ add_executable(
     unit/cli/cli_app_test.cpp
     unit/domain/observation_test.cpp
     unit/domain/result_test.cpp
+    unit/domain/socket_info_test.cpp
     unit/procfs/cmdline_parser_test.cpp
     unit/procfs/passwd_user_resolver_test.cpp
     unit/procfs/process_provider_test.cpp
