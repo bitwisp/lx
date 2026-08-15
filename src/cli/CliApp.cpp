@@ -9,6 +9,7 @@
 #include <fmt/format.h>
 
 #include <ostream>
+#include <istream>
 #include <algorithm>
 #include <cctype>
 #include <limits>
@@ -45,6 +46,29 @@ std::string lower(std::string value)
     std::transform(value.begin(), value.end(), value.begin(),
                    [](const unsigned char c) { return static_cast<char>(std::tolower(c)); });
     return value;
+}
+
+bool confirm(std::istream& input, std::ostream& output,
+             const std::string& prompt, const bool defaultYes)
+{
+    output << prompt << std::flush;
+    std::string answer;
+    if (!std::getline(input, answer)) return false;
+    answer.erase(answer.begin(), std::find_if(
+        answer.begin(), answer.end(),
+        [](const unsigned char c) { return !std::isspace(c); }));
+    answer.erase(std::find_if(
+        answer.rbegin(), answer.rend(),
+        [](const unsigned char c) { return !std::isspace(c); }).base(),
+        answer.end());
+    if (answer.empty()) return defaultYes;
+    const auto normalized = lower(std::move(answer));
+    return normalized == "y" || normalized == "yes";
+}
+
+std::string_view mechanismName(const SignalMechanism mechanism)
+{
+    return mechanism == SignalMechanism::PidFd ? "pidfd" : "kill(2)";
 }
 
 bool isSecretKey(const std::string& key)
@@ -163,6 +187,7 @@ CliApp::CliApp(const application::DoctorService& doctorService,
 int CliApp::run(
     const int argc,
     char** argv,
+    std::istream& input,
     std::ostream& output,
     std::ostream& error) const
 {
@@ -172,10 +197,20 @@ int CliApp::run(
     auto* process = app.add_subcommand("process", "Inspect a process");
     pid_t processPid = -1;
     bool rawCommand = false;
-    process->add_option("pid", processPid, "Process ID")->required()->check(
+    auto* processPidOption = process->add_option("pid", processPid, "Process ID")->check(
         CLI::Range(1, std::numeric_limits<pid_t>::max()));
     process->add_flag("--raw-command", rawCommand,
                       "Display command arguments without best-effort redaction");
+    auto* stopProcess = process->add_subcommand("stop", "Send SIGTERM to a process");
+    pid_t stopPid = -1;
+    stopProcess->add_option("pid", stopPid, "Process ID")->required()->check(
+        CLI::Range(1, std::numeric_limits<pid_t>::max()));
+    auto* killProcess = process->add_subcommand("kill", "Send SIGKILL to a process");
+    pid_t killPid = -1;
+    bool confirmKill = false;
+    killProcess->add_option("pid", killPid, "Process ID")->required()->check(
+        CLI::Range(1, std::numeric_limits<pid_t>::max()));
+    killProcess->add_flag("--yes", confirmKill, "Skip the SIGKILL confirmation");
     auto* port = app.add_subcommand("port", "List listening ports");
     std::uint32_t portNumber = 0;
     auto* portOption = port->add_option("port", portNumber, "Local port")->check(CLI::Range(1, 65535));
@@ -184,7 +219,45 @@ int CliApp::run(
         app.parse(argc, argv);
         if (*doctor) {
             printDoctorReport(doctorService_.inspect(), output);
+        } else if (*stopProcess) {
+            const auto result = processService_.stop(stopPid);
+            if (!result) {
+                error << result.error().message << '\n';
+                return exitCode(result.error().code);
+            }
+            output << fmt::format("Sent SIGTERM to PID {} via {}\n", stopPid,
+                                  mechanismName(result.value().mechanism));
+        } else if (*killProcess) {
+            const auto valid = processService_.validateSignalTarget(killPid);
+            if (!valid) {
+                error << valid.error().message << '\n';
+                return exitCode(valid.error().code);
+            }
+            const auto target = processService_.inspect(killPid);
+            if (!target) {
+                error << target.error().message << '\n';
+                return exitCode(target.error().code);
+            }
+            if (!confirmKill && !confirm(
+                    input, output,
+                    fmt::format("Force termination of PID {} ({}) with SIGKILL? [y/N] ",
+                                killPid, target.value().value.name),
+                    false)) {
+                output << "Cancelled.\n";
+                return 0;
+            }
+            const auto result = processService_.kill(killPid);
+            if (!result) {
+                error << result.error().message << '\n';
+                return exitCode(result.error().code);
+            }
+            output << fmt::format("Sent SIGKILL to PID {} via {}\n", killPid,
+                                  mechanismName(result.value().mechanism));
         } else if (*process) {
+            if (processPidOption->count() == 0) {
+                error << "Process PID or action is required\n";
+                return 2;
+            }
             const auto result = processService_.inspect(processPid);
             if (!result) {
                 error << result.error().message << '\n';

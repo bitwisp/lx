@@ -71,7 +71,8 @@ struct CliResult {
     std::string error;
 };
 
-CliResult runCli(std::vector<std::string> arguments)
+CliResult runCli(std::vector<std::string> arguments,
+                 const std::string& inputText = {})
 {
     std::vector<char*> argv;
     argv.reserve(arguments.size());
@@ -81,6 +82,7 @@ CliResult runCli(std::vector<std::string> arguments)
 
     std::ostringstream output;
     std::ostringstream error;
+    std::istringstream input{inputText};
     const FakeProcessProvider provider;
     const FakeSignalProvider signalProvider;
     const lx::application::ProcessService processService{
@@ -91,7 +93,7 @@ CliResult runCli(std::vector<std::string> arguments)
     const lx::application::PortService portService{
         socketProvider, socketOwnerResolver, provider};
     const auto exitCode = lx::cli::CliApp{doctorService, processService, portService}.run(
-        static_cast<int>(argv.size()), argv.data(), output, error);
+        static_cast<int>(argv.size()), argv.data(), input, output, error);
     return {exitCode, output.str(), error.str()};
 }
 
@@ -126,6 +128,35 @@ TEST_CASE("CLI validates process PID and maps not found")
     REQUIRE(missing.exitCode == 3);
     REQUIRE(missing.output.empty());
     REQUIRE(missing.error.find("Process not found") != std::string::npos);
+}
+
+TEST_CASE("CLI stops and confirms killing processes")
+{
+    const auto stopped = runCli({"lx", "process", "stop", "42"});
+    REQUIRE(stopped.exitCode == 0);
+    REQUIRE(stopped.output.find("SIGTERM") != std::string::npos);
+    REQUIRE(stopped.output.find("pidfd") != std::string::npos);
+
+    const auto cancelled = runCli({"lx", "process", "kill", "42"});
+    REQUIRE(cancelled.exitCode == 0);
+    REQUIRE(cancelled.output.find("Cancelled.") != std::string::npos);
+
+    const auto confirmed = runCli(
+        {"lx", "process", "kill", "42"}, "yes\n");
+    REQUIRE(confirmed.exitCode == 0);
+    REQUIRE(confirmed.output.find("SIGKILL") != std::string::npos);
+
+    const auto assumed = runCli(
+        {"lx", "process", "kill", "42", "--yes"});
+    REQUIRE(assumed.exitCode == 0);
+    REQUIRE(assumed.output.find("SIGKILL") != std::string::npos);
+}
+
+TEST_CASE("CLI rejects protected process signal targets")
+{
+    REQUIRE(runCli({"lx", "process", "stop", "1"}).exitCode == 7);
+    REQUIRE(runCli({"lx", "process", "kill", "999", "--yes"}).exitCode == 7);
+    REQUIRE(runCli({"lx", "process"}).exitCode == 2);
 }
 
 } // namespace

@@ -22,5 +22,5 @@ int main(const int argc, char** argv)
         socketProvider, socketOwnerResolver, processProvider};
     const lx::application::DoctorService doctorService{processProvider, socketProvider};
     return lx::cli::CliApp{doctorService, processService, portService}.run(
-        argc, argv, std::cout, std::cerr);
+        argc, argv, std::cin, std::cout, std::cerr);
 }

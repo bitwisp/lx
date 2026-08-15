@@ -16,7 +16,8 @@ public:
            const application::ProcessService& processService,
            const application::PortService& portService) noexcept;
 
-    int run(int argc, char** argv, std::ostream& output, std::ostream& error) const;
+    int run(int argc, char** argv, std::istream& input,
+            std::ostream& output, std::ostream& error) const;
 
 private:
     const application::DoctorService& doctorService_;
