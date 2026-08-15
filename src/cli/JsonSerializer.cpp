@@ -117,6 +117,50 @@ Json processValue(const ProcessInfo& process, const bool raw)
             {"systemd_unit", optionalString(process.systemdUnit)}};
 }
 
+Json endpointValue(const Endpoint& endpoint)
+{
+    return {{"address", endpoint.address}, {"port", endpoint.port}};
+}
+
+Json socketValue(const SocketInfo& socket)
+{
+    Json remote = socket.remote ? endpointValue(*socket.remote) : Json(nullptr);
+    return {{"protocol", socket.protocol == TransportProtocol::Tcp ? "tcp" : "udp"},
+            {"family", socket.family == AddressFamily::IPv4 ? "ipv4" : "ipv6"},
+            {"local", endpointValue(socket.local)},
+            {"remote", std::move(remote)},
+            {"state", socket.state},
+            {"uid", socket.uid},
+            {"inode", socket.inode},
+            {"owner_pids", socket.ownerPids}};
+}
+
+Json portValue(const PortInfo& port)
+{
+    Json owners = Json::array();
+    for (const auto& owner : port.owners) {
+        owners.push_back(processValue(owner, false));
+    }
+    return {{"socket", socketValue(port.socket)}, {"owners", owners}};
+}
+
+Json optionalPid(const std::optional<pid_t>& value)
+{
+    return value ? Json(*value) : Json(nullptr);
+}
+
+Json serviceValue(const ServiceInfo& service)
+{
+    return {{"unit_name", service.unitName},
+            {"description", service.description},
+            {"load_state", service.loadState},
+            {"active_state", service.activeState},
+            {"sub_state", service.subState},
+            {"unit_file_state", service.unitFileState},
+            {"main_pid", optionalPid(service.mainPid)},
+            {"active_enter_timestamp_usec", service.activeEnterTimestampUsec}};
+}
+
 Json envelope(const std::string& command, const std::string& operation,
               Json data, const std::vector<Warning>& warnings)
 {
@@ -165,6 +209,32 @@ std::string JsonSerializer::processes(
         processes.push_back(processValue(process, false));
     }
     return envelope("process", "list", {{"processes", processes}},
+                    value.warnings).dump();
+}
+
+std::string JsonSerializer::ports(
+    const Observation<std::vector<PortInfo>>& value)
+{
+    Json ports = Json::array();
+    for (const auto& port : value.value) ports.push_back(portValue(port));
+    return envelope("port", "list", {{"ports", ports}}, value.warnings).dump();
+}
+
+std::string JsonSerializer::service(const Observation<ServiceInfo>& value)
+{
+    return envelope("service", "inspect",
+                    {{"service", serviceValue(value.value)}},
+                    value.warnings).dump();
+}
+
+std::string JsonSerializer::services(
+    const Observation<std::vector<ServiceInfo>>& value)
+{
+    Json services = Json::array();
+    for (const auto& service : value.value) {
+        services.push_back(serviceValue(service));
+    }
+    return envelope("service", "list", {{"services", services}},
                     value.warnings).dump();
 }
 

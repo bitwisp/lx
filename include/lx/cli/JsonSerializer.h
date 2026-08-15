@@ -4,6 +4,8 @@
 #include "lx/domain/Warning.h"
 #include "lx/domain/Observation.h"
 #include "lx/domain/ProcessInfo.h"
+#include "lx/domain/PortInfo.h"
+#include "lx/domain/ServiceInfo.h"
 
 #include <string>
 #include <vector>
@@ -25,6 +27,12 @@ public:
         const Observation<ProcessInfo>& value, bool rawCommand = false);
     [[nodiscard]] static std::string processes(
         const Observation<std::vector<ProcessInfo>>& value);
+    [[nodiscard]] static std::string ports(
+        const Observation<std::vector<PortInfo>>& value);
+    [[nodiscard]] static std::string service(
+        const Observation<ServiceInfo>& value);
+    [[nodiscard]] static std::string services(
+        const Observation<std::vector<ServiceInfo>>& value);
 };
 
 } // namespace lx::cli

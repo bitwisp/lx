@@ -41,3 +41,30 @@ TEST_CASE("JSON serializer emits complete redacted process resources")
         lx::cli::JsonSerializer::process(observed, true));
     CHECK(raw.at("data").at("process").at("argv").at(2) == "secret");
 }
+
+TEST_CASE("JSON serializer emits nested port owners and service state")
+{
+    lx::PortInfo port;
+    port.socket.protocol = lx::TransportProtocol::Tcp;
+    port.socket.family = lx::AddressFamily::IPv6;
+    port.socket.local = {"::", 8080};
+    port.socket.ownerPids = {42};
+    lx::ProcessInfo owner;
+    owner.pid = 42;
+    port.owners.push_back(owner);
+    const auto ports = nlohmann::json::parse(
+        lx::cli::JsonSerializer::ports({{{port}}, {}}));
+    const auto& socket = ports.at("data").at("ports").at(0).at("socket");
+    CHECK(socket.at("protocol") == "tcp");
+    CHECK(socket.at("family") == "ipv6");
+    CHECK(socket.at("remote").is_null());
+    CHECK(ports.at("data").at("ports").at(0).at("owners").at(0).at("pid") == 42);
+
+    lx::ServiceInfo service;
+    service.unitName = "demo.service";
+    service.activeState = "active";
+    const auto serialized = nlohmann::json::parse(
+        lx::cli::JsonSerializer::service({service, {}}));
+    CHECK(serialized.at("data").at("service").at("main_pid").is_null());
+    CHECK(serialized.at("data").at("service").at("active_state") == "active");
+}
