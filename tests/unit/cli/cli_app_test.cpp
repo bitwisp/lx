@@ -2,6 +2,7 @@
 #include "lx/application/DoctorService.h"
 #include "lx/application/ProcessService.h"
 #include "lx/application/PortService.h"
+#include "lx/application/ServiceService.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -78,6 +79,59 @@ private:
     int& releaseStage_;
 };
 
+class FakeServiceProvider final : public lx::contracts::IServiceProvider {
+public:
+    lx::Result<void> probe() const override
+    {
+        return lx::Result<void>::success();
+    }
+    lx::Result<lx::Observation<std::vector<lx::ServiceInfo>>> list()
+        const override
+    {
+        lx::ServiceInfo service;
+        service.unitName = "demo.service";
+        service.description = "Demo service";
+        service.loadState = "loaded";
+        service.activeState = "active";
+        service.subState = "running";
+        service.unitFileState = "enabled";
+        service.mainPid = 10;
+        return lx::Result<lx::Observation<std::vector<lx::ServiceInfo>>>::success(
+            {{std::move(service)}, {}});
+    }
+    lx::Result<lx::Observation<lx::ServiceInfo>> get(
+        const std::string& unit) const override
+    {
+        lx::ServiceInfo service;
+        service.unitName = unit;
+        service.description = "Demo service";
+        service.loadState = "loaded";
+        service.activeState = "active";
+        service.subState = "running";
+        service.unitFileState = "enabled";
+        service.mainPid = 10;
+        return lx::Result<lx::Observation<lx::ServiceInfo>>::success(
+            {std::move(service), {}});
+    }
+    lx::Result<std::optional<std::string>> unitByPid(pid_t) const override
+    {
+        return lx::Result<std::optional<std::string>>::success(
+            std::string{"demo.service"});
+    }
+    lx::Result<void> start(const std::string&) const override
+    {
+        return lx::Result<void>::success();
+    }
+    lx::Result<void> stop(const std::string&) const override
+    {
+        return lx::Result<void>::success();
+    }
+    lx::Result<void> restart(const std::string&) const override
+    {
+        return lx::Result<void>::success();
+    }
+};
+
 struct CliResult {
     int exitCode;
     std::string output;
@@ -107,7 +161,10 @@ CliResult runCli(std::vector<std::string> arguments,
         provider, socketProvider, signalProvider};
     const lx::application::PortService portService{
         socketProvider, socketOwnerResolver, processService};
-    const auto exitCode = lx::cli::CliApp{doctorService, processService, portService}.run(
+    const FakeServiceProvider serviceProvider;
+    const lx::application::ServiceService serviceService{serviceProvider};
+    const auto exitCode = lx::cli::CliApp{doctorService, processService,
+                                         portService, serviceService}.run(
         static_cast<int>(argv.size()), argv.data(), input, output, error);
     return {exitCode, output.str(), error.str()};
 }
@@ -119,6 +176,35 @@ TEST_CASE("CLI lists and filters ports") {
 }
 
 TEST_CASE("CLI validates port range") { REQUIRE(runCli({"lx","port","0"}).exitCode==2); REQUIRE(runCli({"lx","port","65536"}).exitCode==2); }
+
+TEST_CASE("CLI lists and inspects services")
+{
+    const auto listed = runCli({"lx", "service"});
+    REQUIRE(listed.exitCode == 0);
+    REQUIRE(listed.output.find("demo.service") != std::string::npos);
+    REQUIRE(listed.output.find("running") != std::string::npos);
+
+    const auto detail = runCli({"lx", "svc", "demo"});
+    REQUIRE(detail.exitCode == 0);
+    REQUIRE(detail.output.find("demo.service") != std::string::npos);
+    REQUIRE(detail.output.find("Demo service") != std::string::npos);
+}
+
+TEST_CASE("CLI controls services with conservative confirmation")
+{
+    const auto started = runCli({"lx", "service", "demo", "start"});
+    REQUIRE(started.exitCode == 0);
+    REQUIRE(started.output.find("start submitted") != std::string::npos);
+
+    const auto cancelled = runCli({"lx", "service", "demo", "stop"});
+    REQUIRE(cancelled.exitCode == 0);
+    REQUIRE(cancelled.output.find("Cancelled") != std::string::npos);
+
+    const auto restarted = runCli(
+        {"lx", "service", "demo", "restart", "--yes"});
+    REQUIRE(restarted.exitCode == 0);
+    REQUIRE(restarted.output.find("restart submitted") != std::string::npos);
+}
 
 TEST_CASE("CLI confirms graceful and forced port release")
 {

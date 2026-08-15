@@ -4,6 +4,7 @@
 #include "lx/application/DoctorService.h"
 #include "lx/application/ProcessService.h"
 #include "lx/application/PortService.h"
+#include "lx/application/ServiceService.h"
 
 #include <CLI/CLI.hpp>
 #include <fmt/format.h>
@@ -13,6 +14,8 @@
 #include <algorithm>
 #include <cctype>
 #include <limits>
+#include <ctime>
+#include <iomanip>
 #include <sstream>
 
 namespace lx::cli {
@@ -182,6 +185,53 @@ void printProcess(const Observation<ProcessInfo>& observed, const bool raw,
     }
 }
 
+std::string timestampText(const std::uint64_t timestampUsec)
+{
+    if (timestampUsec == 0) return "-";
+    const auto seconds = static_cast<std::time_t>(timestampUsec / 1000000U);
+    std::tm local{};
+    if (localtime_r(&seconds, &local) == nullptr) return "-";
+    std::ostringstream formatted;
+    formatted << std::put_time(&local, "%F %T");
+    return formatted.str();
+}
+
+void printServices(const Observation<std::vector<ServiceInfo>>& observed,
+                   std::ostream& output, std::ostream& error)
+{
+    output << "SERVICE                          ACTIVE       SUB              ENABLED          MAIN PID\n";
+    for (const auto& service : observed.value) {
+        output << fmt::format("{:<32} {:<12} {:<16} {:<16} {}\n",
+                              service.unitName, service.activeState,
+                              service.subState,
+                              service.unitFileState.empty() ? "-"
+                                                            : service.unitFileState,
+                              service.mainPid
+                                  ? std::to_string(*service.mainPid)
+                                  : "-");
+    }
+    for (const auto& warning : observed.warnings) {
+        error << "Warning: " << warning.message << '\n';
+    }
+}
+
+void printService(const Observation<ServiceInfo>& observed,
+                  std::ostream& output, std::ostream& error)
+{
+    const auto& service = observed.value;
+    output << service.unitName << "\n\n";
+    output << fmt::format(
+        "Description  {}\nLoad         {}\nActive       {}\nSub          {}\nEnabled      {}\nMain PID     {}\nSince        {}\n",
+        service.description, service.loadState, service.activeState,
+        service.subState,
+        service.unitFileState.empty() ? "-" : service.unitFileState,
+        service.mainPid ? std::to_string(*service.mainPid) : "-",
+        timestampText(service.activeEnterTimestampUsec));
+    for (const auto& warning : observed.warnings) {
+        error << "Warning: " << warning.message << '\n';
+    }
+}
+
 int exitCode(const ErrorCode code)
 {
     switch (code) {
@@ -200,8 +250,10 @@ int exitCode(const ErrorCode code)
 
 CliApp::CliApp(const application::DoctorService& doctorService,
                const application::ProcessService& processService,
-               const application::PortService& portService) noexcept
-    : doctorService_(doctorService), processService_(processService), portService_(portService)
+               const application::PortService& portService,
+               const application::ServiceService& serviceService) noexcept
+    : doctorService_(doctorService), processService_(processService),
+      portService_(portService), serviceService_(serviceService)
 {
 }
 
@@ -242,6 +294,18 @@ int CliApp::run(
         ->required()->check(CLI::Range(1, 65535));
     freePort->add_flag("--yes", confirmRelease,
                        "Skip SIGTERM and SIGKILL confirmations");
+    auto* service = app.add_subcommand("service", "List or manage services");
+    service->alias("svc");
+    std::string serviceUnit;
+    std::string serviceAction;
+    bool confirmServiceAction = false;
+    auto* serviceUnitOption = service->add_option("unit", serviceUnit,
+                                                  "Service unit name");
+    service->add_option("action", serviceAction,
+                        "Lifecycle action: start, stop, or restart")
+        ->check(CLI::IsMember({"start", "stop", "restart"}));
+    service->add_flag("--yes", confirmServiceAction,
+                      "Skip stop and restart confirmation");
 
     try {
         app.parse(argc, argv);
@@ -292,6 +356,45 @@ int CliApp::run(
                 return exitCode(result.error().code);
             }
             printProcess(result.value(), rawCommand, output);
+        } else if (*service) {
+            if (serviceUnitOption->count() == 0) {
+                const auto result = serviceService_.list();
+                if (!result) {
+                    error << result.error().message << '\n';
+                    return exitCode(result.error().code);
+                }
+                printServices(result.value(), output, error);
+            } else if (serviceAction.empty()) {
+                const auto result = serviceService_.inspect(serviceUnit);
+                if (!result) {
+                    error << result.error().message << '\n';
+                    return exitCode(result.error().code);
+                }
+                printService(result.value(), output, error);
+            } else {
+                if ((serviceAction == "stop" || serviceAction == "restart") &&
+                    !confirmServiceAction &&
+                    !confirm(input, output,
+                             fmt::format("{} {}? [y/N] ",
+                                         serviceAction == "stop" ? "Stop"
+                                                                   : "Restart",
+                                         serviceUnit),
+                             false)) {
+                    output << "Cancelled.\n";
+                    return 0;
+                }
+                Result<void> result = serviceAction == "start"
+                                          ? serviceService_.start(serviceUnit)
+                                      : serviceAction == "stop"
+                                          ? serviceService_.stop(serviceUnit)
+                                          : serviceService_.restart(serviceUnit);
+                if (!result) {
+                    error << result.error().message << '\n';
+                    return exitCode(result.error().code);
+                }
+                output << fmt::format("{} submitted for {}\n",
+                                      serviceAction, serviceUnit);
+            }
         } else if (*freePort) {
             auto plan = portService_.prepareRelease(
                 static_cast<std::uint16_t>(freePortNumber));
