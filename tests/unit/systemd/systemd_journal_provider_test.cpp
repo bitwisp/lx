@@ -12,3 +12,13 @@ TEST_CASE("systemd journal provider rejects a zero query limit")
     REQUIRE_FALSE(result);
     REQUIRE(result.error().code == lx::ErrorCode::InvalidArgument);
 }
+
+TEST_CASE("systemd journal follow validates callbacks")
+{
+    const lx::linux::SystemdJournalProvider provider;
+    const lx::LogQuery query;
+
+    const auto result = provider.follow(query, {}, {});
+    REQUIRE_FALSE(result);
+    REQUIRE(result.error().code == lx::ErrorCode::InvalidArgument);
+}

@@ -232,6 +232,42 @@ Result<Observation<std::vector<JournalEntry>>> querySince(
         std::move(result));
 }
 
+Result<void> interrupted()
+{
+    return Result<void>::failure(
+        {ErrorCode::Interrupted, "Journal follow was interrupted", EINTR,
+         "sd-journal", "follow"});
+}
+
+Result<void> positionAfterInitial(
+    sd_journal* journal, const std::vector<JournalEntry>& entries)
+{
+    if (entries.empty()) {
+        const int status = sd_journal_seek_tail(journal);
+        return status < 0
+                   ? Result<void>::failure(journalError(status, "seek tail"))
+                   : Result<void>::success();
+    }
+    const int seekStatus =
+        sd_journal_seek_cursor(journal, entries.back().cursor.c_str());
+    if (seekStatus < 0) {
+        return Result<void>::failure(
+            journalError(seekStatus, "seek initial cursor"));
+    }
+    const int nextStatus = sd_journal_next(journal);
+    if (nextStatus < 0) {
+        return Result<void>::failure(
+            journalError(nextStatus, "position after initial cursor"));
+    }
+    if (nextStatus == 0) {
+        return Result<void>::failure(
+            {ErrorCode::Conflict,
+             "Initial journal cursor disappeared before follow", 0,
+             "sd-journal", "follow"});
+    }
+    return Result<void>::success();
+}
+
 } // namespace
 
 Result<void> SystemdJournalProvider::probe() const
@@ -260,12 +296,70 @@ SystemdJournalProvider::query(const LogQuery& query) const
 }
 
 Result<void> SystemdJournalProvider::follow(
-    const LogQuery&, const contracts::JournalEntrySink&,
-    const contracts::JournalStopRequested&) const
+    const LogQuery& query, const contracts::JournalEntrySink& sink,
+    const contracts::JournalStopRequested& stopRequested) const
 {
-    return Result<void>::failure(
-        {ErrorCode::Unsupported, "Journal follow is not implemented yet", 0,
-         "sd-journal", "follow"});
+    if (!sink || !stopRequested) {
+        return Result<void>::failure(
+            {ErrorCode::InvalidArgument,
+             "Journal follow requires a sink and stop predicate", 0,
+             "sd-journal", "follow"});
+    }
+
+    auto journal = SdJournal::openLocal();
+    if (!journal) return Result<void>::failure(journal.error());
+    auto configured = configureJournal(journal.value().get(), query);
+    if (!configured) return configured;
+
+    auto initial = query.since
+                       ? querySince(journal.value().get(), *query.since,
+                                    query.limit)
+                       : queryTail(journal.value().get(), query.limit);
+    if (!initial) return Result<void>::failure(initial.error());
+
+    auto positioned =
+        positionAfterInitial(journal.value().get(), initial.value().value);
+    if (!positioned) return positioned;
+
+    auto initialEntries = std::move(initial.value().value);
+    auto initialWarnings = std::move(initial.value().warnings);
+    for (std::size_t index = 0; index < initialEntries.size(); ++index) {
+        if (stopRequested()) return interrupted();
+        Observation<JournalEntry> observed{std::move(initialEntries[index]), {}};
+        if (index == 0) observed.warnings = std::move(initialWarnings);
+        auto accepted = sink(observed);
+        if (!accepted) return accepted;
+    }
+
+    while (true) {
+        if (stopRequested()) return interrupted();
+
+        while (true) {
+            const int nextStatus = sd_journal_next(journal.value().get());
+            if (nextStatus < 0) {
+                if (nextStatus == -EINTR && stopRequested()) {
+                    return interrupted();
+                }
+                return Result<void>::failure(
+                    journalError(nextStatus, "read followed entry"));
+            }
+            if (nextStatus == 0) break;
+            auto entry = readCurrentEntry(journal.value().get());
+            if (!entry) return Result<void>::failure(entry.error());
+            auto accepted = sink(entry.value());
+            if (!accepted) return accepted;
+            if (stopRequested()) return interrupted();
+        }
+
+        constexpr std::uint64_t waitUsec = 1000000U;
+        const int waitStatus =
+            sd_journal_wait(journal.value().get(), waitUsec);
+        if (waitStatus < 0) {
+            if (waitStatus == -EINTR && stopRequested()) return interrupted();
+            return Result<void>::failure(
+                journalError(waitStatus, "wait for journal entries"));
+        }
+    }
 }
 
 } // namespace lx::linux
