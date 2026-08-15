@@ -68,3 +68,24 @@ TEST_CASE("JSON serializer emits nested port owners and service state")
     CHECK(serialized.at("data").at("service").at("main_pid").is_null());
     CHECK(serialized.at("data").at("service").at("active_state") == "active");
 }
+
+TEST_CASE("JSON serializer emits finite logs and NDJSON event documents")
+{
+    lx::JournalEntry entry;
+    entry.timestamp = std::chrono::system_clock::time_point{
+        std::chrono::microseconds{1234567}};
+    entry.pid = 42;
+    entry.message = "first\nsecond\x1b";
+    entry.priority = 6;
+    const auto finite = nlohmann::json::parse(
+        lx::cli::JsonSerializer::logs({{{entry}}, {}}));
+    const auto& value = finite.at("data").at("entries").at(0);
+    CHECK(value.at("timestamp_unix_usec") == 1234567);
+    CHECK(value.at("message") == entry.message);
+    CHECK(value.at("systemd_unit").is_null());
+
+    const auto event = nlohmann::json::parse(
+        lx::cli::JsonSerializer::logEvent({entry, {}}));
+    CHECK(event.at("operation") == "follow");
+    CHECK(event.at("data").at("entry").at("pid") == 42);
+}

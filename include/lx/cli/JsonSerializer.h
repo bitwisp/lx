@@ -6,6 +6,7 @@
 #include "lx/domain/ProcessInfo.h"
 #include "lx/domain/PortInfo.h"
 #include "lx/domain/ServiceInfo.h"
+#include "lx/domain/JournalEntry.h"
 
 #include <string>
 #include <vector>
@@ -33,6 +34,10 @@ public:
         const Observation<ServiceInfo>& value);
     [[nodiscard]] static std::string services(
         const Observation<std::vector<ServiceInfo>>& value);
+    [[nodiscard]] static std::string logs(
+        const Observation<std::vector<JournalEntry>>& value);
+    [[nodiscard]] static std::string logEvent(
+        const Observation<JournalEntry>& value);
 };
 
 } // namespace lx::cli

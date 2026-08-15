@@ -161,6 +161,19 @@ Json serviceValue(const ServiceInfo& service)
             {"active_enter_timestamp_usec", service.activeEnterTimestampUsec}};
 }
 
+Json journalValue(const JournalEntry& entry)
+{
+    const auto timestamp = std::chrono::duration_cast<std::chrono::microseconds>(
+        entry.timestamp.time_since_epoch()).count();
+    return {{"timestamp_unix_usec", timestamp},
+            {"cursor", entry.cursor},
+            {"systemd_unit", optionalString(entry.systemdUnit)},
+            {"pid", optionalPid(entry.pid)},
+            {"command", optionalString(entry.command)},
+            {"message", entry.message},
+            {"priority", entry.priority ? Json(*entry.priority) : Json(nullptr)}};
+}
+
 Json envelope(const std::string& command, const std::string& operation,
               Json data, const std::vector<Warning>& warnings)
 {
@@ -235,6 +248,21 @@ std::string JsonSerializer::services(
         services.push_back(serviceValue(service));
     }
     return envelope("service", "list", {{"services", services}},
+                    value.warnings).dump();
+}
+
+std::string JsonSerializer::logs(
+    const Observation<std::vector<JournalEntry>>& value)
+{
+    Json entries = Json::array();
+    for (const auto& entry : value.value) entries.push_back(journalValue(entry));
+    return envelope("log", "read", {{"entries", entries}},
+                    value.warnings).dump();
+}
+
+std::string JsonSerializer::logEvent(const Observation<JournalEntry>& value)
+{
+    return envelope("log", "follow", {{"entry", journalValue(value.value)}},
                     value.warnings).dump();
 }
 
