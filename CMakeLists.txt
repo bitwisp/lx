@@ -209,6 +209,12 @@ install(
     DESTINATION "${CMAKE_INSTALL_MANDIR}/man1"
     COMPONENT documentation
 )
+install(
+    FILES completions/lx.bash
+    DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/bash-completion/completions"
+    RENAME lx
+    COMPONENT completion
+)
 
 if(LX_ENABLE_LTO)
     include(CheckIPOSupported)
