@@ -191,3 +191,50 @@ host service.
 
 Phase 5 deliberately defers reload, enable/disable, service process trees,
 journal queries, and JSON output.
+
+## Phase 6 journal logs
+
+The log path follows `CLI -> LogService -> IJournalProvider ->
+SystemdJournalProvider`. The Linux adapter opens the local journal directly
+with sd-journal, applies structured `_SYSTEMD_UNIT` and `_PID` matches, and
+reads `_COMM`, `MESSAGE`, `PRIORITY`, cursor, and realtime timestamp fields.
+It does not invoke or parse an external log command.
+
+Finite queries include:
+
+```bash
+./build/debug/lx log nginx
+./build/debug/lx log nginx --lines 100
+./build/debug/lx log nginx --since "2026-08-15 10:30:00"
+./build/debug/lx log nginx --since 10m
+./build/debug/lx log --pid 1234
+./build/debug/lx log nginx --pid 1234
+```
+
+A service, PID, or both are required. Missing service suffixes are normalized
+to `.service`; combined filters use AND semantics. `--lines` defaults to 50
+and accepts 1 through 10000. Absolute timestamps are interpreted in local time.
+Compact relative times support seconds, minutes, hours, and days (`30s`,
+`10m`, `2h`, `3d`).
+
+Follow mode prints the same initial recent entries, then waits through
+`sd_journal_wait` rather than polling with sleeps:
+
+```bash
+./build/debug/lx log nginx --lines 20 --follow
+```
+
+Ctrl-C sets a signal-safe stop flag, releases the journal through RAII, restores
+the previous signal handler, and returns exit code 130. Log messages are shown
+as one terminal line; embedded newlines, tabs, escape sequences, and other
+control bytes are escaped before output.
+
+`lx doctor` probes journal access independently from the system service
+manager. A container can therefore report systemd service management as
+unavailable while still allowing local journal queries. Read-only integration
+tests never add journal records and skip explicitly when journal files are
+missing or inaccessible.
+
+Phase 6 does not add global unfiltered logs, priority/boot filters, cursor
+resume, complex natural-language dates, JSON output, or recent logs in
+`inspect`; inspect integration begins in Phase 7.
