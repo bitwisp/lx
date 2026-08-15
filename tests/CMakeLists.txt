@@ -38,6 +38,7 @@ add_executable(
     unit/procfs/socket_inode_resolver_test.cpp
     unit/procfs/stat_parser_test.cpp
     unit/procfs/status_parser_test.cpp
+    unit/procfs/system_metrics_parser_test.cpp
     unit/process/pidfd_test.cpp
     unit/process/linux_signal_provider_test.cpp
     unit/smoke_test.cpp

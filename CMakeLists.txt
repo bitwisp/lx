@@ -99,8 +99,10 @@ add_library(lx_linux STATIC
     src/linux/procfs/SocketFdTarget.cpp
     src/linux/procfs/SocketInodeResolver.cpp
     src/linux/procfs/ProcFsProcessProvider.cpp
+    src/linux/procfs/ProcFsSystemMetricsProvider.cpp
     src/linux/procfs/StatParser.cpp
     src/linux/procfs/StatusParser.cpp
+    src/linux/procfs/SystemMetricsParser.cpp
 )
 if(LX_HAS_SYSTEMD)
     target_sources(
