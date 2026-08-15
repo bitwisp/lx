@@ -1,5 +1,6 @@
 add_executable(
     lx_unit_tests
+    integration/socket/socket_ownership_test.cpp
     unit/application/doctor_service_test.cpp
     unit/application/process_service_test.cpp
     unit/application/port_service_test.cpp
