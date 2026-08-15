@@ -10,6 +10,7 @@ class ServiceService;
 class LogService;
 class InspectService;
 class FindService;
+class StatusService;
 }
 
 namespace lx::cli {
@@ -22,7 +23,8 @@ public:
            const application::ServiceService& serviceService,
            const application::LogService& logService,
            const application::InspectService& inspectService,
-           const application::FindService& findService) noexcept;
+           const application::FindService& findService,
+           const application::StatusService* statusService = nullptr) noexcept;
 
     int run(int argc, char** argv, std::istream& input,
             std::ostream& output, std::ostream& error) const;
@@ -35,6 +37,7 @@ private:
     const application::LogService& logService_;
     const application::InspectService& inspectService_;
     const application::FindService& findService_;
+    const application::StatusService* statusService_;
 };
 
 } // namespace lx::cli

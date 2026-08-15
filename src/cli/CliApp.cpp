@@ -10,6 +10,7 @@
 #include "lx/application/LogService.h"
 #include "lx/application/InspectService.h"
 #include "lx/application/FindService.h"
+#include "lx/application/StatusService.h"
 
 #include <CLI/CLI.hpp>
 #include <fmt/format.h>
@@ -249,6 +250,10 @@ void printProcess(const Observation<ProcessInfo>& observed, const bool raw,
     output << fmt::format("User        {} ({})\nThreads     {}\nRSS         {:.1f} MiB\n",
                           process.user, process.uid, process.threads,
                           static_cast<double>(process.rssBytes) / (1024.0 * 1024.0));
+    output << fmt::format("CPU         {}\n",
+                          process.cpuPercent
+                              ? fmt::format("{:.1f}%", *process.cpuPercent)
+                              : "-");
     output << fmt::format("Executable  {}\nCWD         {}\n",
                           process.executable.value_or("<unavailable>"),
                           process.cwd.value_or("<unavailable>"));
@@ -265,12 +270,13 @@ void printProcess(const Observation<ProcessInfo>& observed, const bool raw,
 void printProcesses(const Observation<std::vector<ProcessInfo>>& observed,
                     std::ostream& output, std::ostream& error)
 {
-    output << "PID      USER             STATE          RSS MiB   THREADS  NAME                     SERVICE\n";
+    output << "PID      USER             STATE          CPU %   RSS MiB   THREADS  NAME                     SERVICE\n";
     for (const auto& process : observed.value) {
         output << fmt::format(
-            "{:<8} {:<16} {:<14} {:>9.1f} {:>8}  {:<24} {}\n",
+            "{:<8} {:<16} {:<14} {:>6} {:>9.1f} {:>8}  {:<24} {}\n",
             process.pid, shortened(process.user, 16),
             shortened(process.state, 14),
+            process.cpuPercent ? fmt::format("{:.1f}", *process.cpuPercent) : "-",
             static_cast<double>(process.rssBytes) / (1024.0 * 1024.0),
             process.threads, shortened(process.name, 24),
             process.systemdUnit.value_or("-"));
@@ -278,6 +284,38 @@ void printProcesses(const Observation<std::vector<ProcessInfo>>& observed,
     for (const auto& warning : observed.warnings) {
         error << "Warning: " << warning.message << '\n';
     }
+}
+
+void printStatus(const HostStatus& status, std::ostream& output)
+{
+    const auto uptimeSeconds = status.uptime.count() / 1000;
+    const auto days = uptimeSeconds / 86400;
+    const auto hours = (uptimeSeconds % 86400) / 3600;
+    const auto minutes = (uptimeSeconds % 3600) / 60;
+    output << fmt::format("Host      {}\nCPU       {}\nMemory    {:.1f} / {:.1f} MiB ({:.1f}%)\nUptime    {}d {:02}h {:02}m\n",
+                          status.hostname,
+                          status.cpuPercent ? fmt::format("{:.1f}%", *status.cpuPercent) : "-",
+                          static_cast<double>(status.memoryUsedBytes) / (1024.0 * 1024.0),
+                          static_cast<double>(status.memoryTotalBytes) / (1024.0 * 1024.0),
+                          status.memoryTotalBytes == 0 ? 0.0 :
+                              100.0 * static_cast<double>(status.memoryUsedBytes) /
+                                  static_cast<double>(status.memoryTotalBytes),
+                          days, hours, minutes);
+}
+
+void attachCpu(Observation<std::vector<ProcessInfo>>& observed,
+               const MetricsView& metrics)
+{
+    for (auto& process : observed.value) {
+        const auto found = metrics.processCpuPercent.find(process.pid);
+        if (found != metrics.processCpuPercent.end()) process.cpuPercent = found->second;
+    }
+}
+
+void attachCpu(Observation<ProcessInfo>& observed, const MetricsView& metrics)
+{
+    const auto found = metrics.processCpuPercent.find(observed.value.pid);
+    if (found != metrics.processCpuPercent.end()) observed.value.cpuPercent = found->second;
 }
 
 std::string timestampText(const std::uint64_t timestampUsec)
@@ -537,11 +575,12 @@ CliApp::CliApp(const application::DoctorService& doctorService,
                const application::ServiceService& serviceService,
                const application::LogService& logService,
                const application::InspectService& inspectService,
-               const application::FindService& findService) noexcept
+               const application::FindService& findService,
+               const application::StatusService* statusService) noexcept
     : doctorService_(doctorService), processService_(processService),
       portService_(portService), serviceService_(serviceService),
       logService_(logService), inspectService_(inspectService),
-      findService_(findService)
+      findService_(findService), statusService_(statusService)
 {
 }
 
@@ -573,6 +612,8 @@ int CliApp::run(
     };
     auto* doctor = app.add_subcommand("doctor", "Check LX capabilities");
     addOutputFlags(doctor);
+    auto* status = app.add_subcommand("status", "Show host CPU, memory, and uptime");
+    addOutputFlags(status);
     auto* process = app.add_subcommand("process", "Inspect a process");
     addOutputFlags(process);
     pid_t processPid = -1;
@@ -691,6 +732,21 @@ int CliApp::run(
             const auto report = doctorService_.inspect();
             if (jsonOutput) output << JsonSerializer::doctor(report) << '\n';
             else printDoctorReport(report, output);
+        } else if (*status) {
+            if (statusService_ == nullptr) {
+                return fail("status", "read",
+                            {ErrorCode::Unavailable, "Status metrics are unavailable",
+                             0, "cli", "status"});
+            }
+            if (jsonOutput) {
+                return fail("status", "read",
+                            {ErrorCode::Unsupported,
+                             "JSON status output is not available in this build",
+                             0, "cli", "status"});
+            }
+            const auto result = statusService_->get();
+            if (!result) return fail("status", "read", result.error());
+            printStatus(result.value(), output);
         } else if (*inspect) {
             const auto result = inspectService_.inspect(inspectExpression);
             if (!result) {
@@ -762,16 +818,24 @@ int CliApp::run(
                 if (processServiceOption->count() != 0) {
                     query.systemdUnit = processServiceFilter;
                 }
-                const auto result = processService_.list(std::move(query));
+                auto result = processService_.list(std::move(query));
                 if (!result) {
                     return fail("process", "list", result.error());
+                }
+                if (statusService_ != nullptr) {
+                    const auto metrics = statusService_->measure();
+                    if (metrics) attachCpu(result.value(), metrics.value());
                 }
                 if (jsonOutput) output << JsonSerializer::processes(result.value()) << '\n';
                 else printProcesses(result.value(), output, diagnostics);
             } else {
-                const auto result = processService_.inspect(processPid);
+                auto result = processService_.inspect(processPid);
                 if (!result) {
                     return fail("process", "inspect", result.error());
+                }
+                if (statusService_ != nullptr) {
+                    const auto metrics = statusService_->measure();
+                    if (metrics) attachCpu(result.value(), metrics.value());
                 }
                 if (jsonOutput) {
                     output << JsonSerializer::process(result.value(), rawCommand) << '\n';

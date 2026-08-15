@@ -7,6 +7,8 @@
 #include "lx/application/InspectService.h"
 #include "lx/application/ResourceResolver.h"
 #include "lx/application/FindService.h"
+#include "lx/application/MetricsService.h"
+#include "lx/application/StatusService.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <nlohmann/json.hpp>
@@ -21,7 +23,8 @@
 
 namespace {
 
-class FakeProcessProvider final : public lx::contracts::IProcessProvider {
+class FakeProcessProvider final : public lx::contracts::IProcessProvider,
+                                  public lx::contracts::IProcessMetricsProvider {
 public:
     lx::Result<lx::Observation<lx::ProcessInfo>> get(const pid_t pid) const override
     {
@@ -46,6 +49,34 @@ public:
         return lx::Result<lx::Observation<std::vector<lx::ProcessInfo>>>::success(
             {{std::move(info)}, {}});
     }
+    lx::Result<std::vector<lx::ProcessCpuSample>> sample() const override
+    {
+        cpuTicks_ += 10;
+        return lx::Result<std::vector<lx::ProcessCpuSample>>::success(
+            {{42, 100, cpuTicks_}});
+    }
+
+private:
+    mutable std::uint64_t cpuTicks_ = 0;
+};
+
+class FakeSystemMetricsProvider final
+    : public lx::contracts::ISystemMetricsProvider {
+public:
+    lx::Result<lx::SystemMetricsSample> sample() const override
+    {
+        total_ += 100;
+        lx::SystemMetricsSample value;
+        value.hostname = "test-host";
+        value.cpu = {total_, total_ / 2};
+        value.memoryTotalBytes = 1024U * 1024U * 1024U;
+        value.memoryAvailableBytes = value.memoryTotalBytes / 4U;
+        value.logicalCpuCount = 2;
+        return lx::Result<lx::SystemMetricsSample>::success(value);
+    }
+
+private:
+    mutable std::uint64_t total_ = 0;
 };
 
 class FakeSocketProvider final : public lx::contracts::ISocketProvider {
@@ -229,6 +260,10 @@ CliResult runCli(std::vector<std::string> arguments,
     std::istringstream input{inputText};
     int releaseStage = 0;
     const FakeProcessProvider provider;
+    const FakeSystemMetricsProvider systemMetricsProvider;
+    const lx::application::MetricsService metricsService{
+        systemMetricsProvider, provider, [](const auto) {}};
+    const lx::application::StatusService statusService{metricsService};
     const FakeSignalProvider signalProvider{releaseStage};
     const FakeServiceProvider serviceProvider{releaseStage};
     const lx::application::ServiceService serviceService{serviceProvider};
@@ -252,9 +287,18 @@ CliResult runCli(std::vector<std::string> arguments,
     const auto exitCode = lx::cli::CliApp{doctorService, processService,
                                          portService, serviceService,
                                          logService, inspectService,
-                                         findService}.run(
+                                         findService, &statusService}.run(
         static_cast<int>(argv.size()), argv.data(), input, output, error);
     return {exitCode, output.str(), error.str()};
+}
+
+TEST_CASE("CLI shows host status")
+{
+    const auto result = runCli({"lx", "status"});
+    REQUIRE(result.exitCode == 0);
+    CHECK(result.output.find("test-host") != std::string::npos);
+    CHECK(result.output.find("CPU") != std::string::npos);
+    CHECK(result.output.find("Memory") != std::string::npos);
 }
 
 TEST_CASE("CLI lists and filters ports") {

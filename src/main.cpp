@@ -7,6 +7,8 @@
 #include "lx/application/InspectService.h"
 #include "lx/application/ResourceResolver.h"
 #include "lx/application/FindService.h"
+#include "lx/application/MetricsService.h"
+#include "lx/application/StatusService.h"
 #if LX_HAS_SYSTEMD
 #include "lx/linux/systemd/SystemdJournalProvider.h"
 #include "lx/linux/systemd/SystemdServiceProvider.h"
@@ -15,6 +17,7 @@
 #include "lx/linux/systemd/UnavailableServiceProvider.h"
 #endif
 #include "lx/linux/procfs/ProcFsProcessProvider.h"
+#include "lx/linux/procfs/ProcFsSystemMetricsProvider.h"
 #include "lx/linux/procfs/SocketInodeResolver.h"
 #include "lx/linux/netlink/NetlinkSocketProvider.h"
 #include "lx/linux/process/LinuxSignalProvider.h"
@@ -25,6 +28,10 @@
 int main(const int argc, char** argv)
 {
     const lx::linux::procfs::ProcFsProcessProvider processProvider;
+    const lx::linux::procfs::ProcFsSystemMetricsProvider systemMetricsProvider;
+    const lx::application::MetricsService metricsService{
+        systemMetricsProvider, processProvider};
+    const lx::application::StatusService statusService{metricsService};
     const lx::linux::process::LinuxSignalProvider signalProvider;
 #if LX_HAS_SYSTEMD
     const lx::linux::SystemdServiceProvider serviceProvider;
@@ -55,6 +62,6 @@ int main(const int argc, char** argv)
         portService, processService, serviceService};
     return lx::cli::CliApp{doctorService, processService, portService,
                            serviceService, logService, inspectService,
-                           findService}.run(
+                           findService, &statusService}.run(
         argc, argv, std::cin, std::cout, std::cerr);
 }
