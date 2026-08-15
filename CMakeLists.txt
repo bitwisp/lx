@@ -255,6 +255,22 @@ if(LX_BUILD_TESTS)
             -DLX_EXPECTED_VERSION=${LX_DISPLAY_VERSION}
             -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/InstallLayoutTest.cmake"
     )
+    find_program(LX_DPKG_DEB_EXECUTABLE dpkg-deb)
+    if(CMAKE_BUILD_TYPE STREQUAL "Release" AND LX_BUILD_TUI AND
+       "${LX_DISPLAY_VERSION}" STREQUAL "${PROJECT_VERSION}" AND
+       LX_DPKG_DEB_EXECUTABLE)
+        add_test(
+            NAME deb_package
+            COMMAND
+                "${CMAKE_COMMAND}"
+                -DLX_BINARY_DIR=${CMAKE_BINARY_DIR}
+                -DLX_CPACK_COMMAND=${CMAKE_CPACK_COMMAND}
+                -DLX_DPKG_DEB_COMMAND=${LX_DPKG_DEB_EXECUTABLE}
+                -DLX_EXPECTED_VERSION=${PROJECT_VERSION}
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/DebPackageTest.cmake"
+        )
+        set_tests_properties(deb_package PROPERTIES LABELS package)
+    endif()
 endif()
 
 set(CPACK_GENERATOR "DEB")
