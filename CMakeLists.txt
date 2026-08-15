@@ -133,6 +133,7 @@ add_library(
     lx_application STATIC
     src/application/DoctorService.cpp
     src/application/DashboardService.cpp
+    src/application/DashboardWorker.cpp
     src/application/FindService.cpp
     src/application/LogService.cpp
     src/application/MetricsService.cpp
@@ -163,8 +164,25 @@ target_link_libraries(
 )
 lx_enable_sanitizers(lx_cli)
 
+if(LX_BUILD_TUI)
+    add_library(lx_tui STATIC src/tui/FtxuiTuiRunner.cpp)
+    add_library(lx::tui ALIAS lx_tui)
+    target_link_libraries(
+        lx_tui
+        PUBLIC lx::application lx::core
+        PRIVATE lx_warnings fmt::fmt ftxui::component ftxui::dom ftxui::screen
+    )
+    lx_enable_sanitizers(lx_tui)
+endif()
+
 add_executable(lx src/main.cpp)
 target_link_libraries(lx PRIVATE lx::cli lx::linux lx_warnings)
+if(LX_BUILD_TUI)
+    target_link_libraries(lx PRIVATE lx::tui)
+    target_compile_definitions(lx PRIVATE LX_HAS_TUI=1)
+else()
+    target_compile_definitions(lx PRIVATE LX_HAS_TUI=0)
+endif()
 lx_enable_sanitizers(lx)
 
 if(LX_ENABLE_LTO)

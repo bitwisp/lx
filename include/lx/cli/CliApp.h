@@ -15,6 +15,8 @@ class StatusService;
 
 namespace lx::cli {
 
+class ITuiRunner;
+
 class CliApp final {
 public:
     CliApp(const application::DoctorService& doctorService,
@@ -24,7 +26,8 @@ public:
            const application::LogService& logService,
            const application::InspectService& inspectService,
            const application::FindService& findService,
-           const application::StatusService* statusService = nullptr) noexcept;
+           const application::StatusService* statusService = nullptr,
+           ITuiRunner* tuiRunner = nullptr) noexcept;
 
     int run(int argc, char** argv, std::istream& input,
             std::ostream& output, std::ostream& error) const;
@@ -38,6 +41,7 @@ private:
     const application::InspectService& inspectService_;
     const application::FindService& findService_;
     const application::StatusService* statusService_;
+    ITuiRunner* tuiRunner_;
 };
 
 } // namespace lx::cli

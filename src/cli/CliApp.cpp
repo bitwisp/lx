@@ -1,6 +1,7 @@
 #include "lx/cli/CliApp.h"
 #include "lx/cli/JsonSerializer.h"
 #include "lx/cli/OutputOptions.h"
+#include "lx/cli/ITuiRunner.h"
 
 #include "lx/Version.h"
 #include "lx/application/DoctorService.h"
@@ -576,11 +577,13 @@ CliApp::CliApp(const application::DoctorService& doctorService,
                const application::LogService& logService,
                const application::InspectService& inspectService,
                const application::FindService& findService,
-               const application::StatusService* statusService) noexcept
+               const application::StatusService* statusService,
+               ITuiRunner* tuiRunner) noexcept
     : doctorService_(doctorService), processService_(processService),
       portService_(portService), serviceService_(serviceService),
       logService_(logService), inspectService_(inspectService),
-      findService_(findService), statusService_(statusService)
+      findService_(findService), statusService_(statusService),
+      tuiRunner_(tuiRunner)
 {
 }
 
@@ -614,6 +617,7 @@ int CliApp::run(
     addOutputFlags(doctor);
     auto* status = app.add_subcommand("status", "Show host CPU, memory, and uptime");
     addOutputFlags(status);
+    auto* tui = app.add_subcommand("tui", "Open the interactive dashboard");
     auto* process = app.add_subcommand("process", "Inspect a process");
     addOutputFlags(process);
     pid_t processPid = -1;
@@ -720,7 +724,7 @@ int CliApp::run(
         };
         if (jsonOutput &&
             (*stopProcess || *killProcess || *freePort ||
-             (*service && !serviceAction.empty()))) {
+             (*service && !serviceAction.empty()) || *tui)) {
             const std::string command = *freePort ? "port" :
                                         (*service ? "service" : "process");
             return fail(command, "mutate",
@@ -728,7 +732,16 @@ int CliApp::run(
                          "--json is only supported by read-only commands", 0,
                          "cli", "validate"});
         }
-        if (*doctor) {
+        if (*tui) {
+            if (tuiRunner_ == nullptr) {
+                return fail("tui", "run",
+                            {ErrorCode::Unavailable,
+                             "LX was built without terminal UI support", 0,
+                             "cli", "tui"});
+            }
+            const auto result = tuiRunner_->run();
+            if (!result) return fail("tui", "run", result.error());
+        } else if (*doctor) {
             const auto report = doctorService_.inspect();
             if (jsonOutput) output << JsonSerializer::doctor(report) << '\n';
             else printDoctorReport(report, output);
