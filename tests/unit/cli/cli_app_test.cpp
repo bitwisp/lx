@@ -36,6 +36,17 @@ public:
     }
 };
 
+class FakeSocketOwnerResolver final
+    : public lx::contracts::ISocketOwnerResolver {
+public:
+    lx::Result<lx::Observation<lx::SocketOwnership>> resolve(
+        const std::vector<std::uint64_t>&) const override
+    {
+        return lx::Result<lx::Observation<lx::SocketOwnership>>::success(
+            {{}, {}});
+    }
+};
+
 struct CliResult {
     int exitCode;
     std::string output;
@@ -55,8 +66,10 @@ CliResult runCli(std::vector<std::string> arguments)
     const FakeProcessProvider provider;
     const lx::application::ProcessService processService{provider};
     const FakeSocketProvider socketProvider;
+    const FakeSocketOwnerResolver socketOwnerResolver;
     const lx::application::DoctorService doctorService{provider, socketProvider};
-    const lx::application::PortService portService{socketProvider};
+    const lx::application::PortService portService{
+        socketProvider, socketOwnerResolver, provider};
     const auto exitCode = lx::cli::CliApp{doctorService, processService, portService}.run(
         static_cast<int>(argv.size()), argv.data(), output, error);
     return {exitCode, output.str(), error.str()};
