@@ -56,3 +56,32 @@ jobs:
       - name: Test
         run: ctest --preset ${{ matrix.preset }}
 
+  deb-package:
+    name: Ubuntu DEB package
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build and packaging tools
+        run: >-
+          sudo apt-get update && sudo apt-get install --yes
+          ninja-build pkg-config libsystemd-dev dpkg-dev groff zsh fish
+
+      - name: Configure package build
+        run: cmake --preset package-release
+
+      - name: Build package configuration
+        run: cmake --build --preset package-release
+
+      - name: Test installed layout and DEB
+        run: ctest --preset package-release
+
+      - name: Create DEB
+        run: cpack --config build/package-release/CPackConfig.cmake -G DEB
+
+      - name: Upload DEB and checksum
+        uses: actions/upload-artifact@v4
+        with:
+          name: lx-resource-manager-deb
+          path: build/package-release/packages/*
+          if-no-files-found: error
