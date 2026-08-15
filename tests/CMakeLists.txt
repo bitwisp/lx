@@ -17,6 +17,7 @@ add_executable(
     unit/domain/port_info_test.cpp
     unit/domain/port_release_test.cpp
     unit/domain/process_signal_test.cpp
+    unit/domain/process_query_test.cpp
     unit/domain/result_test.cpp
     unit/domain/service_info_test.cpp
     unit/domain/socket_info_test.cpp
