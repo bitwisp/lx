@@ -71,6 +71,15 @@
       "cacheVariables": {
         "LX_ENABLE_TSAN": "ON"
       }
+    },
+    {
+      "name": "package-release",
+      "displayName": "Release package with TUI",
+      "inherits": "tui-release",
+      "cacheVariables": {
+        "LX_ENABLE_LTO": "ON",
+        "LX_DISPLAY_VERSION": "0.1.0"
+      }
     }
   ],
   "buildPresets": [
@@ -80,7 +89,8 @@
     { "name": "ubsan", "configurePreset": "ubsan" },
     { "name": "tui-debug", "configurePreset": "tui-debug" },
     { "name": "tui-release", "configurePreset": "tui-release" },
-    { "name": "tsan", "configurePreset": "tsan" }
+    { "name": "tsan", "configurePreset": "tsan" },
+    { "name": "package-release", "configurePreset": "package-release" }
   ],
   "testPresets": [
     {
@@ -116,6 +126,11 @@
     {
       "name": "tsan",
       "configurePreset": "tsan",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "package-release",
+      "configurePreset": "package-release",
       "output": { "outputOnFailure": true }
     }
   ]
