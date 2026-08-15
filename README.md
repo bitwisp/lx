@@ -19,7 +19,8 @@ cmake --build --preset debug
 ctest --preset debug
 ```
 
-Additional presets are available for `release`, `asan`, and `ubsan` builds.
+Additional presets are available for `release`, `asan`, `ubsan`, `tui-debug`,
+and `tsan` builds.
 See [`docs/development.md`](docs/development.md) for the complete workflow.
 
 ## Process inspection
@@ -36,6 +37,28 @@ Inspect or list processes through procfs:
 Command arguments matching common secret option names are redacted by default.
 Use `--raw-command` only when the unmodified process command is explicitly
 required. Process lists also support `--user` and `--service` filters.
+
+## Status and terminal dashboard
+
+Show sampled host CPU, memory, uptime, and per-process CPU usage:
+
+```bash
+./build/debug/lx status
+./build/debug/lx status --json
+./build/debug/lx process
+```
+
+Build the optional FTXUI dashboard separately:
+
+```bash
+cmake --preset tui-debug
+cmake --build --preset tui-debug
+./build/tui-debug/lx tui
+```
+
+It provides live Services, Ports, and Processes panels plus inspect, find,
+logs, and confirmed service/process actions. The normal presets remain free of
+the FTXUI dependency.
 
 ## Unified resources
 

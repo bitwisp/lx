@@ -313,3 +313,66 @@ styling. JSON warnings remain part of the document even with `--quiet`.
 The normative field contract is documented in
 [`json-schema-v1.md`](json-schema-v1.md). Breaking field changes require a new
 schema version.
+
+## Phase 9 metrics and terminal dashboard
+
+Host metrics are read directly from `/proc/stat`, `/proc/meminfo`, and
+`/proc/uptime`; the hostname comes from `gethostname(2)`. CPU percentages use
+two samples. Host idle time includes both idle and I/O wait. Process samples
+are matched by PID and procfs start time so PID reuse cannot transfer CPU usage
+to a new process. Process CPU follows `top` semantics and may exceed 100% on a
+multi-core system.
+
+The read-only commands work in every build:
+
+```bash
+./build/debug/lx status
+./build/debug/lx status --json
+./build/debug/lx process
+```
+
+The FTXUI dashboard is optional and does not affect the normal debug or release
+targets. Configure and run it with:
+
+```bash
+cmake --preset tui-debug
+cmake --build --preset tui-debug
+ctest --preset tui-debug
+./build/tui-debug/lx tui
+```
+
+When a TUI-enabled executable is run without arguments in an interactive
+terminal, it opens the dashboard automatically. `lx tui` is always explicit;
+a non-TUI build returns an unavailable error instead of silently changing
+behavior. FTXUI is pinned to version 7.0.1.
+
+The dashboard publishes immutable snapshots from a worker thread every 1.5
+seconds. Host, process, and port data refresh on each cycle; systemd services
+refresh at most every 3 seconds. A failing source keeps its previous data,
+marks it stale, and exposes a warning instead of clearing unrelated panels.
+
+Controls:
+
+| Key | Action |
+|---|---|
+| `Tab`, Left, Right | Switch Services, Ports, and Processes panels |
+| Up, Down | Select a resource |
+| Enter | Inspect the selected resource graph |
+| `/` | Find resources |
+| `l` | Show recent logs for a selected service or process |
+| `s`, `r` | Confirm stop or restart of the selected service |
+| `k` | Confirm SIGTERM for the selected process |
+| `K` | Double-confirm SIGKILL for the selected process |
+| `F1` | Show keyboard help |
+| Esc, `q` | Close a view or leave the dashboard |
+
+The port panel deliberately has no release shortcut. Port release remains the
+explicit `lx port free PORT` CLI workflow with ownership revalidation.
+
+Thread-sensitive changes can be checked with the TUI-enabled sanitizer preset:
+
+```bash
+cmake --preset tsan
+cmake --build --preset tsan
+ctest --preset tsan
+```
