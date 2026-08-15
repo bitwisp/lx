@@ -77,3 +77,15 @@ Inspect a process with:
 The default output performs best-effort command-line secret redaction. LX does
 not read process environments. Phase 1 deliberately excludes process listing,
 filtering, signaling, service mapping, sockets, and JSON output.
+
+## Phase 2 socket support
+
+Socket inspection follows `CLI -> PortService -> ISocketProvider ->
+NetlinkSocketProvider`. The adapter sends INET_DIAG dump requests for TCP/UDP
+and IPv4/IPv6, validates multipart Netlink responses, and converts kernel types
+into domain `SocketInfo` values. `lx port` lists TCP listeners and unconnected
+UDP bindings; `lx port PORT` filters by local port.
+
+Phase 2 leaves socket inode-to-PID resolution, service mapping, port
+termination, and JSON output for later phases. Integration tests create their
+own sockets and skip explicitly when the execution sandbox prohibits AF_INET.

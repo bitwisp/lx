@@ -35,6 +35,19 @@ Command arguments matching common secret option names are redacted by default.
 Use `--raw-command` only when the unmodified process command is explicitly
 required. Process listing and process actions are not implemented yet.
 
+## Port inspection
+
+Phase 2 queries the kernel through `NETLINK_SOCK_DIAG` without invoking `ss`,
+`netstat`, or another command:
+
+```bash
+./build/debug/lx port
+./build/debug/lx port 8080
+```
+
+TCP listeners and unconnected bound UDP sockets are shown for IPv4 and IPv6.
+Process ownership remains `unresolved` until Phase 3 maps socket inodes to PIDs.
+
 ## Design specification
 
 [`LX_CPP17_Linux_Resource_Manager_Design.md`](LX_CPP17_Linux_Resource_Manager_Design.md)
