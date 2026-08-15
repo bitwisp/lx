@@ -19,6 +19,7 @@ constexpr const char* managerPath = "/org/freedesktop/systemd1";
 constexpr const char* managerInterface = "org.freedesktop.systemd1.Manager";
 constexpr const char* unitInterface = "org.freedesktop.systemd1.Unit";
 constexpr const char* serviceInterface = "org.freedesktop.systemd1.Service";
+constexpr char unitModeSignature[] = {'s', 's', '\0'};
 
 Error busError(const sd_bus_error& error, const int status,
                const std::string& operation)
@@ -143,7 +144,8 @@ Result<void> controlUnit(const std::string& unit, const char* method,
     SdBusMessage reply;
     const int status = sd_bus_call_method(
         connection.value().get(), destination, managerPath, managerInterface,
-        method, error.get(), reply.put(), "ss", unit.c_str(), "replace");
+        method, error.get(), reply.put(), unitModeSignature, unit.c_str(),
+        "replace");
     if (status < 0) {
         return Result<void>::failure(busError(error.value(), status, operation));
     }
