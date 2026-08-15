@@ -52,14 +52,6 @@ Error busError(const sd_bus_error& error, const int status,
     return {code, std::move(message), number, "systemd", operation};
 }
 
-template <typename T>
-Result<T> unsupported(const std::string& operation)
-{
-    return Result<T>::failure({ErrorCode::Unsupported,
-                               "systemd operation is not implemented yet", 0,
-                               "systemd", operation});
-}
-
 Result<std::string> getUnitPath(sd_bus* bus, const std::string& unit)
 {
     SdBusError error;
@@ -137,6 +129,31 @@ Warning warningFrom(const Error& error)
 {
     return {error.code, error.message, error.systemError, error.component,
             error.operation};
+}
+
+Result<void> controlUnit(const std::string& unit, const char* method,
+                         const std::string& operation)
+{
+    auto connection = SdBusConnection::openSystem();
+    if (!connection) return Result<void>::failure(connection.error());
+
+    SdBusError error;
+    SdBusMessage reply;
+    const int status = sd_bus_call_method(
+        connection.value().get(), destination, managerPath, managerInterface,
+        method, error.get(), reply.put(), "ss", unit.c_str(), "replace");
+    if (status < 0) {
+        return Result<void>::failure(busError(error.value(), status, operation));
+    }
+
+    const char* jobPath = nullptr;
+    if (sd_bus_message_read(reply.get(), "o", &jobPath) < 0 ||
+        jobPath == nullptr) {
+        return Result<void>::failure(
+            {ErrorCode::ProtocolError,
+             "systemd returned no job object path", 0, "systemd", operation});
+    }
+    return Result<void>::success();
 }
 
 } // namespace
@@ -308,19 +325,19 @@ SystemdServiceProvider::unitByPid(const pid_t pid) const
         std::optional<std::string>{std::move(id).value()});
 }
 
-Result<void> SystemdServiceProvider::start(const std::string&) const
+Result<void> SystemdServiceProvider::start(const std::string& unit) const
 {
-    return unsupported<void>("start service");
+    return controlUnit(unit, "StartUnit", "start service");
 }
 
-Result<void> SystemdServiceProvider::stop(const std::string&) const
+Result<void> SystemdServiceProvider::stop(const std::string& unit) const
 {
-    return unsupported<void>("stop service");
+    return controlUnit(unit, "StopUnit", "stop service");
 }
 
-Result<void> SystemdServiceProvider::restart(const std::string&) const
+Result<void> SystemdServiceProvider::restart(const std::string& unit) const
 {
-    return unsupported<void>("restart service");
+    return controlUnit(unit, "RestartUnit", "restart service");
 }
 
 } // namespace lx::linux
