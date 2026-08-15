@@ -138,4 +138,20 @@ Result<Observation<std::vector<ProcessInfo>>> ProcFsProcessProvider::list() cons
         std::move(observed));
 }
 
+Result<std::vector<ProcessCpuSample>> ProcFsProcessProvider::sample() const
+{
+    const auto ids = reader_.processIds();
+    if (!ids) return Result<std::vector<ProcessCpuSample>>::failure(ids.error());
+
+    std::vector<ProcessCpuSample> samples;
+    samples.reserve(ids.value().size());
+    for (const auto pid : ids.value()) {
+        const auto text = reader_.readFile(pid, "stat");
+        if (!text) continue; // A process may disappear during enumeration.
+        const auto parsed = parseProcessCpuStat(text.value());
+        if (parsed && parsed.value().pid == pid) samples.push_back(parsed.value());
+    }
+    return Result<std::vector<ProcessCpuSample>>::success(std::move(samples));
+}
+
 } // namespace lx::linux::procfs

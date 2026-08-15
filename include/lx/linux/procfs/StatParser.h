@@ -1,6 +1,7 @@
 #pragma once
 
 #include "lx/domain/Result.h"
+#include "lx/domain/SystemMetrics.h"
 
 #include <string>
 #include <string_view>
@@ -16,6 +17,7 @@ struct StatRecord {
 };
 
 [[nodiscard]] Result<StatRecord> parseStat(std::string_view contents);
+[[nodiscard]] Result<ProcessCpuSample> parseProcessCpuStat(
+    std::string_view contents);
 
 } // namespace lx::linux::procfs
-
