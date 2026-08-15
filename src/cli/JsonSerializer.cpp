@@ -279,11 +279,12 @@ std::string JsonSerializer::processes(
 }
 
 std::string JsonSerializer::ports(
-    const Observation<std::vector<PortInfo>>& value)
+    const Observation<std::vector<PortInfo>>& value,
+    const std::string& operation)
 {
     Json ports = Json::array();
     for (const auto& port : value.value) ports.push_back(portValue(port));
-    return envelope("port", "list", {{"ports", ports}}, value.warnings).dump();
+    return envelope("port", operation, {{"ports", ports}}, value.warnings).dump();
 }
 
 std::string JsonSerializer::service(const Observation<ServiceInfo>& value)

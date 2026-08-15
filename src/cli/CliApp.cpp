@@ -1,4 +1,5 @@
 #include "lx/cli/CliApp.h"
+#include "lx/cli/JsonSerializer.h"
 
 #include "lx/Version.h"
 #include "lx/application/DoctorService.h"
@@ -550,8 +551,16 @@ int CliApp::run(
 {
     CLI::App app{"Resource-oriented Linux inspection and management tool", "lx"};
     app.set_version_flag("--version", fmt::format("LX {}", lx::version));
-    const auto* doctor = app.add_subcommand("doctor", "Check LX capabilities");
+    bool jsonOutput = false;
+    app.add_flag("--json", jsonOutput, "Write stable machine-readable JSON");
+    const auto addJsonFlag = [&jsonOutput](CLI::App* command) {
+        command->add_flag("--json", jsonOutput,
+                          "Write stable machine-readable JSON");
+    };
+    auto* doctor = app.add_subcommand("doctor", "Check LX capabilities");
+    addJsonFlag(doctor);
     auto* process = app.add_subcommand("process", "Inspect a process");
+    addJsonFlag(process);
     pid_t processPid = -1;
     bool rawCommand = false;
     std::string processNameFilter;
@@ -568,19 +577,23 @@ int CliApp::run(
     auto* processServiceOption = process->add_option(
         "--service", processServiceFilter, "Filter by systemd service");
     auto* stopProcess = process->add_subcommand("stop", "Send SIGTERM to a process");
+    addJsonFlag(stopProcess);
     pid_t stopPid = -1;
     stopProcess->add_option("pid", stopPid, "Process ID")->required()->check(
         CLI::Range(1, std::numeric_limits<pid_t>::max()));
     auto* killProcess = process->add_subcommand("kill", "Send SIGKILL to a process");
+    addJsonFlag(killProcess);
     pid_t killPid = -1;
     bool confirmKill = false;
     killProcess->add_option("pid", killPid, "Process ID")->required()->check(
         CLI::Range(1, std::numeric_limits<pid_t>::max()));
     killProcess->add_flag("--yes", confirmKill, "Skip the SIGKILL confirmation");
     auto* port = app.add_subcommand("port", "List listening ports");
+    addJsonFlag(port);
     std::uint32_t portNumber = 0;
     auto* portOption = port->add_option("port", portNumber, "Local port")->check(CLI::Range(1, 65535));
     auto* freePort = port->add_subcommand("free", "Release a listening port");
+    addJsonFlag(freePort);
     std::uint32_t freePortNumber = 0;
     bool confirmRelease = false;
     freePort->add_option("port", freePortNumber, "Local port")
@@ -588,6 +601,7 @@ int CliApp::run(
     freePort->add_flag("--yes", confirmRelease,
                        "Skip SIGTERM and SIGKILL confirmations");
     auto* service = app.add_subcommand("service", "List or manage services");
+    addJsonFlag(service);
     service->alias("svc");
     std::string serviceUnit;
     std::string serviceAction;
@@ -600,6 +614,7 @@ int CliApp::run(
     service->add_flag("--yes", confirmServiceAction,
                       "Skip stop and restart confirmation");
     auto* log = app.add_subcommand("log", "Query journal entries");
+    addJsonFlag(log);
     std::string logUnit;
     pid_t logPid = -1;
     std::uint32_t logLines = 50;
@@ -619,31 +634,37 @@ int CliApp::run(
                   "Show recent entries and follow new journal entries");
     auto* inspect = app.add_subcommand(
         "inspect", "Inspect a port, PID, service, or untyped resource");
+    addJsonFlag(inspect);
     std::string inspectExpression;
     inspect->add_option("resource", inspectExpression, "Resource expression")
         ->required();
     auto* find = app.add_subcommand("find", "Search observable resources");
+    addJsonFlag(find);
     std::string findQuery;
     find->add_option("query", findQuery, "Search query")->required();
 
     try {
         app.parse(argc, argv);
         if (*doctor) {
-            printDoctorReport(doctorService_.inspect(), output);
+            const auto report = doctorService_.inspect();
+            if (jsonOutput) output << JsonSerializer::doctor(report) << '\n';
+            else printDoctorReport(report, output);
         } else if (*inspect) {
             const auto result = inspectService_.inspect(inspectExpression);
             if (!result) {
                 error << result.error().message << '\n';
                 return exitCode(result.error().code);
             }
-            printResourceGraph(result.value(), output, error);
+            if (jsonOutput) output << JsonSerializer::inspect(result.value()) << '\n';
+            else printResourceGraph(result.value(), output, error);
         } else if (*find) {
             const auto result = findService_.find(findQuery);
             if (!result) {
                 error << result.error().message << '\n';
                 return exitCode(result.error().code);
             }
-            printFindResult(result.value(), output, error);
+            if (jsonOutput) output << JsonSerializer::find(result.value()) << '\n';
+            else printFindResult(result.value(), output, error);
         } else if (*stopProcess) {
             const auto result = processService_.stop(stopPid);
             if (!result) {
@@ -702,14 +723,17 @@ int CliApp::run(
                     error << result.error().message << '\n';
                     return exitCode(result.error().code);
                 }
-                printProcesses(result.value(), output, error);
+                if (jsonOutput) output << JsonSerializer::processes(result.value()) << '\n';
+                else printProcesses(result.value(), output, error);
             } else {
                 const auto result = processService_.inspect(processPid);
                 if (!result) {
                     error << result.error().message << '\n';
                     return exitCode(result.error().code);
                 }
-                printProcess(result.value(), rawCommand, output);
+                if (jsonOutput) {
+                    output << JsonSerializer::process(result.value(), rawCommand) << '\n';
+                } else printProcess(result.value(), rawCommand, output);
             }
         } else if (*service) {
             if (serviceUnitOption->count() == 0) {
@@ -718,14 +742,16 @@ int CliApp::run(
                     error << result.error().message << '\n';
                     return exitCode(result.error().code);
                 }
-                printServices(result.value(), output, error);
+                if (jsonOutput) output << JsonSerializer::services(result.value()) << '\n';
+                else printServices(result.value(), output, error);
             } else if (serviceAction.empty()) {
                 const auto result = serviceService_.inspect(serviceUnit);
                 if (!result) {
                     error << result.error().message << '\n';
                     return exitCode(result.error().code);
                 }
-                printService(result.value(), output, error);
+                if (jsonOutput) output << JsonSerializer::service(result.value()) << '\n';
+                else printService(result.value(), output, error);
             } else {
                 if ((serviceAction == "stop" || serviceAction == "restart") &&
                     !confirmServiceAction &&
@@ -772,9 +798,11 @@ int CliApp::run(
                 }
                 const auto result = logService_.follow(
                     std::move(query),
-                    [&output, &error](
+                    [&output, &error, jsonOutput](
                         const Observation<JournalEntry>& entry) {
-                        printJournalEntry(entry, output, error);
+                        if (jsonOutput) {
+                            output << JsonSerializer::logEvent(entry) << '\n';
+                        } else printJournalEntry(entry, output, error);
                         output.flush();
                         return Result<void>::success();
                     },
@@ -792,7 +820,8 @@ int CliApp::run(
                     error << result.error().message << '\n';
                     return exitCode(result.error().code);
                 }
-                printJournalEntries(result.value(), output, error);
+                if (jsonOutput) output << JsonSerializer::logs(result.value()) << '\n';
+                else printJournalEntries(result.value(), output, error);
             }
         } else if (*freePort) {
             auto plan = portService_.prepareRelease(
@@ -869,6 +898,12 @@ int CliApp::run(
             const auto result = portService_.inspect(query);
             if (!result) { error << result.error().message << '\n'; return exitCode(result.error().code); }
             if (result.value().value.empty() && query.localPort) { error << "No socket found for port " << portNumber << '\n'; return 3; }
+            if (jsonOutput) {
+                output << JsonSerializer::ports(
+                              result.value(), query.localPort ? "inspect" : "list")
+                       << '\n';
+                return 0;
+            }
             output << "PROTO  ADDRESS                                  PORT   STATE        UID     INODE       PROCESS          PID          SERVICE\n";
             for (const auto& portInfo : result.value().value) {
                 const auto& socket = portInfo.socket;

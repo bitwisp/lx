@@ -32,7 +32,8 @@ public:
     [[nodiscard]] static std::string processes(
         const Observation<std::vector<ProcessInfo>>& value);
     [[nodiscard]] static std::string ports(
-        const Observation<std::vector<PortInfo>>& value);
+        const Observation<std::vector<PortInfo>>& value,
+        const std::string& operation = "list");
     [[nodiscard]] static std::string service(
         const Observation<ServiceInfo>& value);
     [[nodiscard]] static std::string services(

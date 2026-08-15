@@ -9,6 +9,7 @@
 #include "lx/application/FindService.h"
 
 #include <catch2/catch_test_macros.hpp>
+#include <nlohmann/json.hpp>
 
 #include <sstream>
 #include <csignal>
@@ -284,6 +285,40 @@ TEST_CASE("CLI finds related observable resources")
 
     const auto missing = runCli({"lx", "find", "does-not-exist"});
     CHECK(missing.exitCode == 3);
+}
+
+TEST_CASE("CLI writes pure JSON for read-only commands")
+{
+    const std::vector<std::vector<std::string>> commands{
+        {"lx", "doctor", "--json"},
+        {"lx", "process", "--json"},
+        {"lx", "process", "42", "--json"},
+        {"lx", "port", "8080", "--json"},
+        {"lx", "service", "demo", "--json"},
+        {"lx", "log", "demo", "--json"},
+        {"lx", "inspect", "port:8080", "--json"},
+        {"lx", "find", "demo", "--json"}};
+    for (const auto& command : commands) {
+        const auto result = runCli(command);
+        REQUIRE(result.exitCode == 0);
+        CHECK(result.error.empty());
+        const auto value = nlohmann::json::parse(result.output);
+        CHECK(value.at("schema_version") == 1);
+        CHECK(value.contains("data"));
+        CHECK(value.contains("warnings"));
+    }
+}
+
+TEST_CASE("CLI streams followed logs as independent NDJSON documents")
+{
+    const auto result = runCli({"lx", "log", "demo", "--follow", "--json"});
+    REQUIRE(result.exitCode == 130);
+    std::istringstream lines{result.output};
+    std::string line;
+    REQUIRE(std::getline(lines, line));
+    const auto event = nlohmann::json::parse(line);
+    CHECK(event.at("operation") == "follow");
+    CHECK(event.at("data").contains("entry"));
 }
 
 TEST_CASE("CLI validates port range") { REQUIRE(runCli({"lx","port","0"}).exitCode==2); REQUIRE(runCli({"lx","port","65536"}).exitCode==2); }
