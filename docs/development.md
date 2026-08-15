@@ -7,10 +7,24 @@
 - Ninja
 - GCC or Clang with C++17 support
 - Git and network access for the first dependency fetch
+- `libsystemd` development headers for the Phase 5 service backend
 
-Phase 0 does not require libsystemd or pkg-config. Those system dependencies
-will be introduced with the systemd adapter rather than imposed on the current
-CLI skeleton.
+On Ubuntu or Debian, install the service backend dependencies with:
+
+```bash
+sudo apt install pkg-config libsystemd-dev
+```
+
+On RHEL, Rocky Linux, or AlmaLinux, use:
+
+```bash
+sudo dnf install pkgconf-pkg-config systemd-devel
+```
+
+The dependency remains optional. If headers or the library are unavailable,
+the build reports `systemd sd-bus backend: unavailable`, keeps port/process
+features, and wires a provider that returns a structured unavailable error.
+Use `-DLX_ENABLE_SYSTEMD=OFF` to disable detection explicitly.
 
 ## Configure, build, and test
 
@@ -19,6 +33,12 @@ cmake --preset debug
 cmake --build --preset debug
 ctest --preset debug
 ```
+
+Preset builds are written to `build/debug`, `build/release`, `build/asan`, and
+`build/ubsan`. Run `./build/debug/lx`; a separate CLion
+`cmake-build-debug-wsl` directory is not updated by these commands. Configure
+CLion with the matching CMake preset or rebuild that directory before running
+its executable.
 
 The same workflow supports the `release`, `asan`, and `ubsan` presets. Run a
 sanitizer preset after parser, native-resource, or lifetime-sensitive changes.
@@ -130,3 +150,44 @@ Signal integration tests fork their own child processes and always reap them.
 They never target an unrelated host process. Phase 4 still leaves systemd-aware
 stopping, configuration-driven confirmation, process lists, and JSON for later
 phases.
+
+## Phase 5 systemd services
+
+The service path follows `CLI -> ServiceService -> IServiceProvider ->
+SystemdServiceProvider`. The Linux adapter connects directly to the system bus
+with sd-bus and uses `ListUnits`, `GetUnit`, `GetUnitByPID`, `StartUnit`,
+`StopUnit`, and `RestartUnit`. It never parses service-manager command output.
+All bus connections, messages, and errors have C++ RAII ownership.
+
+Available commands are:
+
+```bash
+./build/debug/lx service
+./build/debug/lx service nginx
+./build/debug/lx service nginx start
+./build/debug/lx service nginx stop
+./build/debug/lx service nginx restart --yes
+./build/debug/lx svc nginx
+```
+
+Missing suffixes are normalized to `.service`. Stop and restart require a
+default-no confirmation unless `--yes` is present. Start submits immediately.
+The commands report successful job submission; they do not claim that the
+asynchronous systemd job has already completed.
+
+Process inspection now uses `GetUnitByPID` and shows the associated service.
+Port rows aggregate the services of their visible owners. `lx port free PORT`
+recommends stopping a service only when every owner is readable and all owners
+map to exactly the same `.service`. It revalidates socket inode and PID targets
+before stopping. A service error or ownership change aborts the operation and
+never silently falls back to process signals.
+
+`lx doctor` distinguishes an available backend from an inaccessible bus or
+missing systemd manager. On WSL/containers without a system service manager,
+service commands are unavailable while process and port features continue to
+start normally. The systemd integration test performs read-only queries and
+skips explicitly when the manager cannot be reached; it never controls a real
+host service.
+
+Phase 5 deliberately defers reload, enable/disable, service process trees,
+journal queries, and JSON output.
