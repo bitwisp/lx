@@ -2,6 +2,8 @@
 
 #include "lx/domain/Error.h"
 #include "lx/domain/Warning.h"
+#include "lx/domain/Observation.h"
+#include "lx/domain/ProcessInfo.h"
 
 #include <string>
 #include <vector>
@@ -19,6 +21,10 @@ public:
     [[nodiscard]] static std::string emptySuccess(
         const std::string& command, const std::string& operation,
         const std::vector<Warning>& warnings = {});
+    [[nodiscard]] static std::string process(
+        const Observation<ProcessInfo>& value, bool rawCommand = false);
+    [[nodiscard]] static std::string processes(
+        const Observation<std::vector<ProcessInfo>>& value);
 };
 
 } // namespace lx::cli

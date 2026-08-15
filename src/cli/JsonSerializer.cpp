@@ -2,6 +2,9 @@
 
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
+#include <cctype>
+
 namespace lx::cli {
 namespace {
 using Json = nlohmann::json;
@@ -49,6 +52,80 @@ Json warningValues(const std::vector<Warning>& warnings)
     for (const auto& warning : warnings) values.push_back(warningValue(warning));
     return values;
 }
+
+std::string lower(std::string value)
+{
+    std::transform(value.begin(), value.end(), value.begin(),
+                   [](const unsigned char character) {
+                       return static_cast<char>(std::tolower(character));
+                   });
+    return value;
+}
+
+bool secretKey(const std::string& value)
+{
+    auto key = lower(value);
+    return key == "password" || key == "passwd" || key == "token" ||
+           key == "api-key" || key == "apikey" || key == "secret" ||
+           key == "database_url";
+}
+
+std::vector<std::string> arguments(
+    const std::vector<std::string>& source, const bool raw)
+{
+    if (raw) return source;
+    auto values = source;
+    bool redactNext = false;
+    for (auto& argument : values) {
+        if (redactNext) {
+            argument = "<redacted>";
+            redactNext = false;
+            continue;
+        }
+        const auto equal = argument.find('=');
+        auto key = equal == std::string::npos
+                       ? argument
+                       : argument.substr(0, equal);
+        while (!key.empty() && key.front() == '-') key.erase(key.begin());
+        if (secretKey(key)) {
+            if (equal == std::string::npos) redactNext = true;
+            else argument = argument.substr(0, equal + 1) + "<redacted>";
+        }
+    }
+    return values;
+}
+
+Json optionalString(const std::optional<std::string>& value)
+{
+    return value ? Json(*value) : Json(nullptr);
+}
+
+Json processValue(const ProcessInfo& process, const bool raw)
+{
+    return {{"pid", process.pid},
+            {"ppid", process.ppid},
+            {"name", process.name},
+            {"state", process.state},
+            {"uid", process.uid},
+            {"gid", process.gid},
+            {"user", process.user},
+            {"executable", optionalString(process.executable)},
+            {"cwd", optionalString(process.cwd)},
+            {"argv", arguments(process.argv, raw)},
+            {"rss_bytes", process.rssBytes},
+            {"threads", process.threads},
+            {"systemd_unit", optionalString(process.systemdUnit)}};
+}
+
+Json envelope(const std::string& command, const std::string& operation,
+              Json data, const std::vector<Warning>& warnings)
+{
+    return {{"schema_version", JsonSerializer::schemaVersion},
+            {"command", command},
+            {"operation", operation},
+            {"data", std::move(data)},
+            {"warnings", warningValues(warnings)}};
+}
 } // namespace
 
 std::string JsonSerializer::error(
@@ -70,6 +147,25 @@ std::string JsonSerializer::emptySuccess(
                 {"operation", operation},
                 {"data", Json::object()},
                 {"warnings", warningValues(warnings)}}.dump();
+}
+
+std::string JsonSerializer::process(
+    const Observation<ProcessInfo>& value, const bool rawCommand)
+{
+    return envelope("process", "inspect",
+                    {{"process", processValue(value.value, rawCommand)}},
+                    value.warnings).dump();
+}
+
+std::string JsonSerializer::processes(
+    const Observation<std::vector<ProcessInfo>>& value)
+{
+    Json processes = Json::array();
+    for (const auto& process : value.value) {
+        processes.push_back(processValue(process, false));
+    }
+    return envelope("process", "list", {{"processes", processes}},
+                    value.warnings).dump();
 }
 
 } // namespace lx::cli
