@@ -24,6 +24,7 @@ add_executable(
     unit/procfs/stat_parser_test.cpp
     unit/procfs/status_parser_test.cpp
     unit/process/pidfd_test.cpp
+    unit/process/linux_signal_provider_test.cpp
     unit/smoke_test.cpp
 )
 target_link_libraries(
