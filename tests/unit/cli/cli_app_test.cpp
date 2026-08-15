@@ -13,6 +13,8 @@
 
 #include <sstream>
 #include <csignal>
+#include <cstdlib>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -350,6 +352,37 @@ TEST_CASE("CLI rejects JSON mode before destructive actions")
         CHECK(nlohmann::json::parse(result.output)
                   .at("error").at("code") == "invalid_argument");
     }
+}
+
+TEST_CASE("CLI quiet mode preserves data and suppresses diagnostics")
+{
+    const auto query = runCli({"lx", "port", "9090", "--quiet"});
+    REQUIRE(query.exitCode == 0);
+    CHECK_FALSE(query.output.empty());
+    CHECK(query.error.empty());
+
+    const auto action = runCli({"lx", "process", "stop", "42", "--quiet"});
+    REQUIRE(action.exitCode == 0);
+    CHECK(action.output.empty());
+    CHECK(action.error.empty());
+}
+
+TEST_CASE("CLI no-color options never emit ANSI sequences")
+{
+    const auto flag = runCli({"lx", "doctor", "--no-color"});
+    REQUIRE(flag.exitCode == 0);
+    CHECK(flag.output.find("\x1b[") == std::string::npos);
+
+    const char* previous = std::getenv("NO_COLOR");
+    const std::optional<std::string> saved = previous
+                                                 ? std::optional<std::string>{previous}
+                                                 : std::nullopt;
+    ::setenv("NO_COLOR", "1", 1);
+    const auto environment = runCli({"lx", "doctor"});
+    if (saved) ::setenv("NO_COLOR", saved->c_str(), 1);
+    else ::unsetenv("NO_COLOR");
+    REQUIRE(environment.exitCode == 0);
+    CHECK(environment.output.find("\x1b[") == std::string::npos);
 }
 
 TEST_CASE("CLI validates port range") { REQUIRE(runCli({"lx","port","0"}).exitCode==2); REQUIRE(runCli({"lx","port","65536"}).exitCode==2); }

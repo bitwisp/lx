@@ -1,5 +1,6 @@
 #include "lx/cli/CliApp.h"
 #include "lx/cli/JsonSerializer.h"
+#include "lx/cli/OutputOptions.h"
 
 #include "lx/Version.h"
 #include "lx/application/DoctorService.h"
@@ -26,6 +27,7 @@
 #include <sstream>
 #include <type_traits>
 #include <string_view>
+#include <cstdlib>
 
 namespace lx::cli {
 
@@ -238,7 +240,7 @@ void printReleasePlan(const PortReleasePlan& plan, std::ostream& output)
 }
 
 void printProcess(const Observation<ProcessInfo>& observed, const bool raw,
-                  std::ostream& output)
+                  std::ostream& output, const bool quiet = false)
 {
     const auto& process = observed.value;
     output << fmt::format("Process {}\n\n", process.pid);
@@ -254,7 +256,7 @@ void printProcess(const Observation<ProcessInfo>& observed, const bool raw,
            << joinArguments(displayedArguments(process.argv, raw)) << '\n';
     output << "\nService\n  "
            << process.systemdUnit.value_or("<none>") << '\n';
-    if (!observed.warnings.empty()) {
+    if (!quiet && !observed.warnings.empty()) {
         output << "\nWarnings\n";
         for (const auto& warning : observed.warnings) output << "  " << warning.message << '\n';
     }
@@ -557,14 +559,22 @@ int CliApp::run(
     CLI::App app{"Resource-oriented Linux inspection and management tool", "lx"};
     app.set_version_flag("--version", fmt::format("LX {}", lx::version));
     app.add_flag("--json", jsonOutput, "Write stable machine-readable JSON");
-    const auto addJsonFlag = [&jsonOutput](CLI::App* command) {
+    bool quietOutput = false;
+    bool noColor = false;
+    app.add_flag("--quiet", quietOutput, "Suppress non-essential diagnostics");
+    app.add_flag("--no-color", noColor, "Disable ANSI color output");
+    const auto addOutputFlags = [&](CLI::App* command) {
         command->add_flag("--json", jsonOutput,
                           "Write stable machine-readable JSON");
+        command->add_flag("--quiet", quietOutput,
+                          "Suppress non-essential diagnostics");
+        command->add_flag("--no-color", noColor,
+                          "Disable ANSI color output");
     };
     auto* doctor = app.add_subcommand("doctor", "Check LX capabilities");
-    addJsonFlag(doctor);
+    addOutputFlags(doctor);
     auto* process = app.add_subcommand("process", "Inspect a process");
-    addJsonFlag(process);
+    addOutputFlags(process);
     pid_t processPid = -1;
     bool rawCommand = false;
     std::string processNameFilter;
@@ -581,23 +591,23 @@ int CliApp::run(
     auto* processServiceOption = process->add_option(
         "--service", processServiceFilter, "Filter by systemd service");
     auto* stopProcess = process->add_subcommand("stop", "Send SIGTERM to a process");
-    addJsonFlag(stopProcess);
+    addOutputFlags(stopProcess);
     pid_t stopPid = -1;
     stopProcess->add_option("pid", stopPid, "Process ID")->required()->check(
         CLI::Range(1, std::numeric_limits<pid_t>::max()));
     auto* killProcess = process->add_subcommand("kill", "Send SIGKILL to a process");
-    addJsonFlag(killProcess);
+    addOutputFlags(killProcess);
     pid_t killPid = -1;
     bool confirmKill = false;
     killProcess->add_option("pid", killPid, "Process ID")->required()->check(
         CLI::Range(1, std::numeric_limits<pid_t>::max()));
     killProcess->add_flag("--yes", confirmKill, "Skip the SIGKILL confirmation");
     auto* port = app.add_subcommand("port", "List listening ports");
-    addJsonFlag(port);
+    addOutputFlags(port);
     std::uint32_t portNumber = 0;
     auto* portOption = port->add_option("port", portNumber, "Local port")->check(CLI::Range(1, 65535));
     auto* freePort = port->add_subcommand("free", "Release a listening port");
-    addJsonFlag(freePort);
+    addOutputFlags(freePort);
     std::uint32_t freePortNumber = 0;
     bool confirmRelease = false;
     freePort->add_option("port", freePortNumber, "Local port")
@@ -605,7 +615,7 @@ int CliApp::run(
     freePort->add_flag("--yes", confirmRelease,
                        "Skip SIGTERM and SIGKILL confirmations");
     auto* service = app.add_subcommand("service", "List or manage services");
-    addJsonFlag(service);
+    addOutputFlags(service);
     service->alias("svc");
     std::string serviceUnit;
     std::string serviceAction;
@@ -618,7 +628,7 @@ int CliApp::run(
     service->add_flag("--yes", confirmServiceAction,
                       "Skip stop and restart confirmation");
     auto* log = app.add_subcommand("log", "Query journal entries");
-    addJsonFlag(log);
+    addOutputFlags(log);
     std::string logUnit;
     pid_t logPid = -1;
     std::uint32_t logLines = 50;
@@ -638,17 +648,26 @@ int CliApp::run(
                   "Show recent entries and follow new journal entries");
     auto* inspect = app.add_subcommand(
         "inspect", "Inspect a port, PID, service, or untyped resource");
-    addJsonFlag(inspect);
+    addOutputFlags(inspect);
     std::string inspectExpression;
     inspect->add_option("resource", inspectExpression, "Resource expression")
         ->required();
     auto* find = app.add_subcommand("find", "Search observable resources");
-    addJsonFlag(find);
+    addOutputFlags(find);
     std::string findQuery;
     find->add_option("query", findQuery, "Search query")->required();
 
     try {
         app.parse(argc, argv);
+        const char* noColorEnvironment = std::getenv("NO_COLOR");
+        const OutputOptions outputOptions{
+            quietOutput,
+            !noColor &&
+                (noColorEnvironment == nullptr || *noColorEnvironment == '\0')};
+        std::ostringstream mutedDiagnostics;
+        std::ostream& diagnostics = outputOptions.quiet
+                                        ? static_cast<std::ostream&>(mutedDiagnostics)
+                                        : error;
         const auto fail = [&](const std::string& command,
                               const std::string& operation,
                               const Error& failure) {
@@ -678,21 +697,23 @@ int CliApp::run(
                 return fail("inspect", "inspect", result.error());
             }
             if (jsonOutput) output << JsonSerializer::inspect(result.value()) << '\n';
-            else printResourceGraph(result.value(), output, error);
+            else printResourceGraph(result.value(), output, diagnostics);
         } else if (*find) {
             const auto result = findService_.find(findQuery);
             if (!result) {
                 return fail("find", "search", result.error());
             }
             if (jsonOutput) output << JsonSerializer::find(result.value()) << '\n';
-            else printFindResult(result.value(), output, error);
+            else printFindResult(result.value(), output, diagnostics);
         } else if (*stopProcess) {
             const auto result = processService_.stop(stopPid);
             if (!result) {
                 return fail("process", "stop", result.error());
             }
-            output << fmt::format("Sent SIGTERM to PID {} via {}\n", stopPid,
-                                  mechanismName(result.value().mechanism));
+            if (!outputOptions.quiet) {
+                output << fmt::format("Sent SIGTERM to PID {} via {}\n", stopPid,
+                                      mechanismName(result.value().mechanism));
+            }
         } else if (*killProcess) {
             const auto valid = processService_.validateSignalTarget(killPid);
             if (!valid) {
@@ -707,15 +728,17 @@ int CliApp::run(
                     fmt::format("Force termination of PID {} ({}) with SIGKILL? [y/N] ",
                                 killPid, target.value().value.name),
                     false)) {
-                output << "Cancelled.\n";
+                if (!outputOptions.quiet) output << "Cancelled.\n";
                 return 0;
             }
             const auto result = processService_.kill(killPid);
             if (!result) {
                 return fail("process", "kill", result.error());
             }
-            output << fmt::format("Sent SIGKILL to PID {} via {}\n", killPid,
-                                  mechanismName(result.value().mechanism));
+            if (!outputOptions.quiet) {
+                output << fmt::format("Sent SIGKILL to PID {} via {}\n", killPid,
+                                      mechanismName(result.value().mechanism));
+            }
         } else if (*process) {
             const bool hasFilters = processNameOption->count() != 0 ||
                                     processUserOption->count() != 0 ||
@@ -744,7 +767,7 @@ int CliApp::run(
                     return fail("process", "list", result.error());
                 }
                 if (jsonOutput) output << JsonSerializer::processes(result.value()) << '\n';
-                else printProcesses(result.value(), output, error);
+                else printProcesses(result.value(), output, diagnostics);
             } else {
                 const auto result = processService_.inspect(processPid);
                 if (!result) {
@@ -752,7 +775,8 @@ int CliApp::run(
                 }
                 if (jsonOutput) {
                     output << JsonSerializer::process(result.value(), rawCommand) << '\n';
-                } else printProcess(result.value(), rawCommand, output);
+                } else printProcess(result.value(), rawCommand, output,
+                                    outputOptions.quiet);
             }
         } else if (*service) {
             if (serviceUnitOption->count() == 0) {
@@ -761,14 +785,14 @@ int CliApp::run(
                     return fail("service", "list", result.error());
                 }
                 if (jsonOutput) output << JsonSerializer::services(result.value()) << '\n';
-                else printServices(result.value(), output, error);
+                else printServices(result.value(), output, diagnostics);
             } else if (serviceAction.empty()) {
                 const auto result = serviceService_.inspect(serviceUnit);
                 if (!result) {
                     return fail("service", "inspect", result.error());
                 }
                 if (jsonOutput) output << JsonSerializer::service(result.value()) << '\n';
-                else printService(result.value(), output, error);
+                else printService(result.value(), output, diagnostics);
             } else {
                 if ((serviceAction == "stop" || serviceAction == "restart") &&
                     !confirmServiceAction &&
@@ -778,7 +802,7 @@ int CliApp::run(
                                                                    : "Restart",
                                          serviceUnit),
                              false)) {
-                    output << "Cancelled.\n";
+                    if (!outputOptions.quiet) output << "Cancelled.\n";
                     return 0;
                 }
                 Result<void> result = serviceAction == "start"
@@ -789,8 +813,10 @@ int CliApp::run(
                 if (!result) {
                     return fail("service", serviceAction, result.error());
                 }
-                output << fmt::format("{} submitted for {}\n",
-                                      serviceAction, serviceUnit);
+                if (!outputOptions.quiet) {
+                    output << fmt::format("{} submitted for {}\n",
+                                          serviceAction, serviceUnit);
+                }
             }
         } else if (*log) {
             LogQuery query;
@@ -815,11 +841,11 @@ int CliApp::run(
                 }
                 const auto result = logService_.follow(
                     std::move(query),
-                    [&output, &error, jsonOutput](
+                    [&output, &diagnostics, jsonOutput](
                         const Observation<JournalEntry>& entry) {
                         if (jsonOutput) {
                             output << JsonSerializer::logEvent(entry) << '\n';
-                        } else printJournalEntry(entry, output, error);
+                        } else printJournalEntry(entry, output, diagnostics);
                         output.flush();
                         return Result<void>::success();
                     },
@@ -836,7 +862,7 @@ int CliApp::run(
                     return fail("log", "read", result.error());
                 }
                 if (jsonOutput) output << JsonSerializer::logs(result.value()) << '\n';
-                else printJournalEntries(result.value(), output, error);
+                else printJournalEntries(result.value(), output, diagnostics);
             }
         } else if (*freePort) {
             auto plan = portService_.prepareRelease(
@@ -851,7 +877,7 @@ int CliApp::run(
                              fmt::format("Stop {}? [Y/n] ",
                                          *plan.value().value.recommendedUnit),
                              true)) {
-                    output << "Cancelled.\n";
+                    if (!outputOptions.quiet) output << "Cancelled.\n";
                     return 0;
                 }
                 auto stopped = portService_.stopManagedService(
@@ -860,16 +886,18 @@ int CliApp::run(
                     return fail("port", "free", stopped.error());
                 }
                 for (const auto& warning : stopped.value().warnings) {
-                    error << "Warning: " << warning.message << '\n';
+                    diagnostics << "Warning: " << warning.message << '\n';
                 }
-                output << fmt::format("Port {} released by stopping {}.\n",
-                                      freePortNumber,
-                                      *plan.value().value.recommendedUnit);
+                if (!outputOptions.quiet) {
+                    output << fmt::format("Port {} released by stopping {}.\n",
+                                          freePortNumber,
+                                          *plan.value().value.recommendedUnit);
+                }
                 return 0;
             }
             if (!confirmRelease && !confirm(
                     input, output, "Send SIGTERM to all owners? [Y/n] ", true)) {
-                output << "Cancelled.\n";
+                if (!outputOptions.quiet) output << "Cancelled.\n";
                 return 0;
             }
 
@@ -878,11 +906,13 @@ int CliApp::run(
                 return fail("port", "free", terminated.error());
             }
             for (const auto& warning : terminated.value().warnings) {
-                error << "Warning: " << warning.message << '\n';
+                diagnostics << "Warning: " << warning.message << '\n';
             }
             if (terminated.value().value.released) {
-                output << fmt::format("Port {} released with SIGTERM.\n",
-                                      freePortNumber);
+                if (!outputOptions.quiet) {
+                    output << fmt::format("Port {} released with SIGTERM.\n",
+                                          freePortNumber);
+                }
                 return 0;
             }
 
@@ -890,7 +920,7 @@ int CliApp::run(
             if (!confirmRelease && !confirm(
                     input, output,
                     "Force remaining owners with SIGKILL? [y/N] ", false)) {
-                output << "Cancelled.\n";
+                if (!outputOptions.quiet) output << "Cancelled.\n";
                 return 0;
             }
             auto forced = portService_.force(
@@ -899,10 +929,12 @@ int CliApp::run(
                 return fail("port", "free", forced.error());
             }
             for (const auto& warning : forced.value().warnings) {
-                error << "Warning: " << warning.message << '\n';
+                diagnostics << "Warning: " << warning.message << '\n';
             }
-            output << fmt::format("Port {} released with SIGKILL.\n",
-                                  freePortNumber);
+            if (!outputOptions.quiet) {
+                output << fmt::format("Port {} released with SIGKILL.\n",
+                                      freePortNumber);
+            }
         } else if (*port) {
             SocketQuery query;
             if (portOption->count() != 0) query.localPort = static_cast<std::uint16_t>(portNumber);
@@ -931,7 +963,7 @@ int CliApp::run(
                     socket.uid, socket.inode, ownerNames(portInfo),
                     ownerPids(portInfo), ownerServices(portInfo));
             }
-            for (const auto& warning : result.value().warnings) error << "Warning: " << warning.message << '\n';
+            for (const auto& warning : result.value().warnings) diagnostics << "Warning: " << warning.message << '\n';
         }
         return 0;
     } catch (const CLI::ParseError& parseError) {
