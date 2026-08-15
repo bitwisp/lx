@@ -46,6 +46,7 @@ if(LX_HAS_SYSTEMD)
             unit/systemd/systemd_service_provider_test.cpp
             unit/systemd/systemd_journal_provider_test.cpp
             integration/systemd/systemd_provider_test.cpp
+            integration/systemd/journal_provider_test.cpp
     )
 endif()
 target_link_libraries(
