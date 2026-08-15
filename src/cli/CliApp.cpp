@@ -222,19 +222,42 @@ std::string timestampText(const std::uint64_t timestampUsec)
     return formatted.str();
 }
 
+std::string tableCell(const std::string_view value, const std::size_t width)
+{
+    std::string cell;
+    if (value.size() <= width) {
+        cell = value;
+    } else if (width > 3) {
+        cell = std::string{value.substr(0, width - 3)} + "...";
+    } else {
+        cell = std::string{value.substr(0, width)};
+    }
+    cell.append(width - cell.size(), ' ');
+    return cell;
+}
+
 void printServices(const Observation<std::vector<ServiceInfo>>& observed,
                    std::ostream& output, std::ostream& error)
 {
-    output << "SERVICE                          ACTIVE       SUB              ENABLED          MAIN PID\n";
+    constexpr std::size_t serviceWidth = 40;
+    constexpr std::size_t activeWidth = 12;
+    constexpr std::size_t subWidth = 16;
+    constexpr std::size_t enabledWidth = 16;
+    output << tableCell("SERVICE", serviceWidth) << ' '
+           << tableCell("ACTIVE", activeWidth) << ' '
+           << tableCell("SUB", subWidth) << ' '
+           << tableCell("ENABLED", enabledWidth) << " MAIN PID\n";
     for (const auto& service : observed.value) {
-        output << fmt::format("{:<32} {:<12} {:<16} {:<16} {}\n",
-                              service.unitName, service.activeState,
-                              service.subState,
-                              service.unitFileState.empty() ? "-"
-                                                            : service.unitFileState,
-                              service.mainPid
-                                  ? std::to_string(*service.mainPid)
-                                  : "-");
+        output << tableCell(service.unitName, serviceWidth) << ' '
+               << tableCell(service.activeState, activeWidth) << ' '
+               << tableCell(service.subState, subWidth) << ' '
+               << tableCell(service.unitFileState.empty()
+                                ? "-"
+                                : service.unitFileState,
+                            enabledWidth)
+               << ' '
+               << (service.mainPid ? std::to_string(*service.mainPid) : "-")
+               << '\n';
     }
     for (const auto& warning : observed.warnings) {
         error << "Warning: " << warning.message << '\n';

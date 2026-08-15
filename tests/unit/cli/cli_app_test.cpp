@@ -100,8 +100,15 @@ public:
         service.subState = "running";
         service.unitFileState = "enabled";
         service.mainPid = 10;
+        lx::ServiceInfo longService;
+        longService.unitName =
+            "systemd-udev-load-credentials-very-long.service";
+        longService.loadState = "loaded";
+        longService.activeState = "inactive";
+        longService.subState = "dead";
+        longService.unitFileState = "static";
         return lx::Result<lx::Observation<std::vector<lx::ServiceInfo>>>::success(
-            {{std::move(service)}, {}});
+            {{std::move(service), std::move(longService)}, {}});
     }
     lx::Result<lx::Observation<lx::ServiceInfo>> get(
         const std::string& unit) const override
@@ -191,6 +198,15 @@ TEST_CASE("CLI lists and inspects services")
     REQUIRE(listed.exitCode == 0);
     REQUIRE(listed.output.find("demo.service") != std::string::npos);
     REQUIRE(listed.output.find("running") != std::string::npos);
+    REQUIRE(listed.output.find(
+                "systemd-udev-load-credentials-very-long.service") ==
+            std::string::npos);
+    const auto longLineStart = listed.output.find("systemd-udev");
+    const auto longLineEnd = listed.output.find('\n', longLineStart);
+    const auto longLine = listed.output.substr(
+        longLineStart, longLineEnd - longLineStart);
+    REQUIRE(longLine.find("...") != std::string::npos);
+    REQUIRE(longLine.find("inactive") == 41);
 
     const auto detail = runCli({"lx", "svc", "demo"});
     REQUIRE(detail.exitCode == 0);
