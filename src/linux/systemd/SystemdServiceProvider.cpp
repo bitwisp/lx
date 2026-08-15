@@ -209,7 +209,7 @@ SystemdServiceProvider::list() const
                                        service.unitName);
         if (fileState) {
             service.unitFileState = std::move(fileState).value();
-        } else {
+        } else if (fileState.error().code != ErrorCode::NotFound) {
             observation.warnings.push_back(warningFrom(fileState.error()));
         }
 
