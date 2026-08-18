@@ -23,6 +23,7 @@ set(lx_expected_files
     "share/doc/lx/README.md"
     "share/doc/lx/development.md"
     "share/doc/lx/json-schema-v1.md"
+    "share/doc/lx/security.md"
     "share/man/man1/lx.1"
     "share/bash-completion/completions/lx"
     "share/zsh/site-functions/_lx"

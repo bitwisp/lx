@@ -213,7 +213,7 @@ install(
     COMPONENT documentation
 )
 install(
-    FILES docs/development.md docs/json-schema-v1.md
+    FILES docs/development.md docs/json-schema-v1.md docs/security.md
     DESTINATION "${LX_INSTALL_DOCDIR}"
     COMPONENT documentation
 )

@@ -7,7 +7,7 @@ function(lx_add_runtime_dependencies)
     FetchContent_Declare(
         CLI11
         GIT_REPOSITORY https://github.com/CLIUtils/CLI11.git
-        GIT_TAG v2.6.2
+        GIT_TAG 37bb6edc5317e99af72ef48405e65d9ca5218861
         GIT_SHALLOW TRUE
     )
 
@@ -16,7 +16,7 @@ function(lx_add_runtime_dependencies)
     FetchContent_Declare(
         fmt
         GIT_REPOSITORY https://github.com/fmtlib/fmt.git
-        GIT_TAG 12.1.0
+        GIT_TAG 407c905e45ad75fc29bf0f9bb7c5c2fd3475976f
         GIT_SHALLOW TRUE
     )
 
@@ -25,7 +25,7 @@ function(lx_add_runtime_dependencies)
     FetchContent_Declare(
         nlohmann_json
         GIT_REPOSITORY https://github.com/nlohmann/json.git
-        GIT_TAG v3.12.0
+        GIT_TAG 55f93686c01528224f448c19128836e7df245f72
         GIT_SHALLOW TRUE
     )
 
@@ -40,7 +40,7 @@ function(lx_add_tui_dependencies)
     FetchContent_Declare(
         FTXUI
         GIT_REPOSITORY https://github.com/ArthurSonzogni/FTXUI.git
-        GIT_TAG v7.0.1
+        GIT_TAG c100eab535db2283b78d30fcb6d082a1f84fb683
         GIT_SHALLOW TRUE
     )
     FetchContent_MakeAvailable(FTXUI)
@@ -53,7 +53,7 @@ function(lx_add_test_dependencies)
     FetchContent_Declare(
         Catch2
         GIT_REPOSITORY https://github.com/catchorg/Catch2.git
-        GIT_TAG v3.15.0
+        GIT_TAG 6ee0826dcae55ed1e06b2c5701981221e979e1e6
         GIT_SHALLOW TRUE
     )
     FetchContent_MakeAvailable(Catch2)

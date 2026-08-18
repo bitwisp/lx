@@ -11,7 +11,8 @@ development environment does not yet contain all required packages.
 
 ## Decision
 
-CMake FetchContent retrieves release-tagged CLI11, fmt, and Catch2 versions.
+CMake FetchContent retrieves immutable reviewed CLI11, fmt, JSON, FTXUI,
+Catch2, and Google Benchmark commits corresponding to documented releases.
 Third-party targets do not inherit LX warning settings. Before distribution
 packaging begins, CMake will also support consuming compatible system packages.
 

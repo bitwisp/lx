@@ -90,6 +90,7 @@ endif()
 foreach(lx_path
         "/usr/bin/lx"
         "/usr/share/man/man1/lx.1"
+        "/usr/share/doc/lx/security.md"
         "/usr/share/bash-completion/completions/lx"
         "/usr/share/zsh/site-functions/_lx"
         "/usr/share/fish/vendor_completions.d/lx.fish")
