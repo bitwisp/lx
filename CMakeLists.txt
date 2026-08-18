@@ -31,6 +31,9 @@ include(Sanitizers)
 include(Hardening)
 include(Dependencies)
 
+set(THREADS_PREFER_PTHREAD_FLAG ON)
+find_package(Threads REQUIRED)
+
 set(
     LX_DISPLAY_VERSION
     "${PROJECT_VERSION}-dev"
@@ -158,7 +161,11 @@ add_library(
     src/application/StatusService.cpp
 )
 add_library(lx::application ALIAS lx_application)
-target_link_libraries(lx_application PUBLIC lx::core PRIVATE lx_warnings)
+target_link_libraries(
+    lx_application
+    PUBLIC lx::core
+    PRIVATE lx_warnings Threads::Threads
+)
 lx_enable_sanitizers(lx_application)
 lx_enable_hardening(lx_application)
 
@@ -185,7 +192,13 @@ if(LX_BUILD_TUI)
     target_link_libraries(
         lx_tui
         PUBLIC lx::application lx::core
-        PRIVATE lx_warnings fmt::fmt ftxui::component ftxui::dom ftxui::screen
+        PRIVATE
+            lx_warnings
+            Threads::Threads
+            fmt::fmt
+            ftxui::component
+            ftxui::dom
+            ftxui::screen
     )
     lx_enable_sanitizers(lx_tui)
     lx_enable_hardening(lx_tui)
