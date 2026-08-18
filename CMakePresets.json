@@ -78,7 +78,8 @@
       "inherits": "tui-release",
       "cacheVariables": {
         "LX_ENABLE_LTO": "ON",
-        "LX_DISPLAY_VERSION": "0.1.0"
+        "LX_DISPLAY_VERSION": "0.1.0",
+        "LX_PACKAGE_VERSION": "0.1.0"
       }
     }
   ],

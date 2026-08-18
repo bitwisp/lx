@@ -35,6 +35,12 @@ set(
     CACHE STRING
     "LX display version"
 )
+set(
+    LX_PACKAGE_VERSION
+    "${PROJECT_VERSION}"
+    CACHE STRING
+    "LX package-manager version"
+)
 lx_add_runtime_dependencies()
 if(LX_BUILD_TUI)
     lx_add_tui_dependencies()
@@ -257,7 +263,7 @@ if(LX_BUILD_TESTS)
     )
     find_program(LX_DPKG_DEB_EXECUTABLE dpkg-deb)
     if(CMAKE_BUILD_TYPE STREQUAL "Release" AND LX_BUILD_TUI AND
-       "${LX_DISPLAY_VERSION}" STREQUAL "${PROJECT_VERSION}" AND
+       "${LX_DISPLAY_VERSION}" STREQUAL "${LX_PACKAGE_VERSION}" AND
        LX_DPKG_DEB_EXECUTABLE)
         add_test(
             NAME deb_package
@@ -266,7 +272,7 @@ if(LX_BUILD_TESTS)
                 -DLX_BINARY_DIR=${CMAKE_BINARY_DIR}
                 -DLX_CPACK_COMMAND=${CMAKE_CPACK_COMMAND}
                 -DLX_DPKG_DEB_COMMAND=${LX_DPKG_DEB_EXECUTABLE}
-                -DLX_EXPECTED_VERSION=${PROJECT_VERSION}
+                -DLX_EXPECTED_VERSION=${LX_PACKAGE_VERSION}
                 -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/DebPackageTest.cmake"
         )
         set_tests_properties(deb_package PROPERTIES LABELS package)
@@ -280,7 +286,7 @@ set(CPACK_PACKAGE_CONTACT "LX maintainers")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY
     "Native Linux resource inspection and management tool"
 )
-set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
+set(CPACK_PACKAGE_VERSION "${LX_PACKAGE_VERSION}")
 set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
 set(CPACK_PACKAGE_DIRECTORY "${CMAKE_BINARY_DIR}/packages")
 set(CPACK_PACKAGE_CHECKSUM "SHA256")
