@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
   pull_request:
+  schedule:
+    - cron: "17 3 * * 1"
 
 permissions:
   contents: read
@@ -56,6 +58,81 @@ jobs:
       - name: Test
         run: ctest --preset ${{ matrix.preset }}
 
+  compatibility:
+    name: ${{ matrix.name }} compatibility
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Ubuntu 24.04
+            image: ubuntu:24.04
+            family: deb
+          - name: Debian 13
+            image: debian:13
+            family: deb
+            systemd: "OFF"
+          - name: Rocky Linux 8
+            image: rockylinux:8
+            family: rpm
+          - name: AlmaLinux 9
+            image: almalinux:9
+            family: rpm
+          - name: Ubuntu 22.04 extended
+            image: ubuntu:22.04
+            family: deb
+            extended: true
+          - name: Ubuntu 26.04 extended
+            image: ubuntu:26.04
+            family: deb
+            extended: true
+          - name: Debian 12 extended
+            image: debian:12
+            family: deb
+            extended: true
+          - name: Rocky Linux 9 extended
+            image: rockylinux:9
+            family: rpm
+            extended: true
+          - name: AlmaLinux 8 extended
+            image: almalinux:8
+            family: rpm
+            extended: true
+          - name: Fedora extended
+            image: fedora:latest
+            family: rpm
+            extended: true
+    container: ${{ matrix.image }}
+    env:
+      LX_COMPAT_SYSTEMD: ${{ matrix.systemd || 'ON' }}
+    steps:
+      - name: Install Debian-family build tools
+        if: matrix.family == 'deb' && (!matrix.extended || github.event_name == 'schedule')
+        run: >-
+          apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install --yes
+          ca-certificates cmake g++ git ninja-build pkg-config libsystemd-dev
+
+      - name: Install RPM-family build tools
+        if: matrix.family == 'rpm' && (!matrix.extended || github.event_name == 'schedule')
+        run: >-
+          dnf install --assumeyes
+          ca-certificates cmake gcc-c++ git ninja-build pkgconf-pkg-config systemd-devel
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        if: ${{ !matrix.extended || github.event_name == 'schedule' }}
+
+      - name: Configure
+        if: ${{ !matrix.extended || github.event_name == 'schedule' }}
+        run: >-
+          cmake -S . -B build/compat -G Ninja
+          -DCMAKE_BUILD_TYPE=Release -DLX_ENABLE_HARDENING=ON
+          -DLX_BUILD_TESTS=ON -DLX_BUILD_TUI=OFF
+          -DLX_ENABLE_SYSTEMD=${LX_COMPAT_SYSTEMD}
+
+      - name: Build and test
+        if: ${{ !matrix.extended || github.event_name == 'schedule' }}
+        run: cmake --build build/compat && ctest --test-dir build/compat --output-on-failure
+
   deb-package:
     name: Ubuntu 22.04 DEB package and lifecycle
     runs-on: ubuntu-24.04
@@ -104,6 +181,7 @@ jobs:
           name: lx-resource-manager-deb
           path: build/package-release/packages/*
           if-no-files-found: error
+
   rpm-package:
     name: Rocky Linux 8 RPM package and lifecycle
     runs-on: ubuntu-24.04
@@ -173,3 +251,29 @@ jobs:
           name: lx-phase10b-benchmarks
           path: build/benchmark-release/phase10b-benchmarks.json
           if-no-files-found: error
+
+  ubi-runtime:
+    name: UBI ${{ matrix.major }} RPM runtime
+    if: github.event_name == 'schedule'
+    needs: rpm-package
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        major: [8, 9]
+    container: registry.access.redhat.com/ubi${{ matrix.major }}/ubi
+    steps:
+      - name: Install artifact tools
+        run: dnf install --assumeyes gzip tar
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: lx-resource-manager-rpm
+          path: packages
+
+      - name: Install and verify RPM
+        run: >-
+          dnf install --assumeyes packages/*.rpm
+          && lx --version
+          && lx doctor --no-color
+          && lx status --json
