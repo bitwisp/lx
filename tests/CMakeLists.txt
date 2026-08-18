@@ -75,6 +75,7 @@ target_compile_definitions(
     PRIVATE LX_TEST_DISPLAY_VERSION="${LX_DISPLAY_VERSION}"
 )
 lx_enable_sanitizers(lx_unit_tests)
+lx_enable_hardening(lx_unit_tests)
 
 include(Catch)
 if(LX_ENABLE_ASAN)

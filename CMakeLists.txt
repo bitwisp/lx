@@ -17,6 +17,7 @@ option(LX_ENABLE_ASAN "Enable AddressSanitizer" OFF)
 option(LX_ENABLE_UBSAN "Enable UndefinedBehaviorSanitizer" OFF)
 option(LX_ENABLE_TSAN "Enable ThreadSanitizer" OFF)
 option(LX_ENABLE_LTO "Enable link-time optimization" OFF)
+option(LX_ENABLE_HARDENING "Enable release compiler and ELF hardening" OFF)
 option(LX_ENABLE_SYSTEMD "Enable the systemd sd-bus backend when available" ON)
 option(LX_WARNINGS_AS_ERRORS "Treat LX source warnings as errors" OFF)
 
@@ -27,6 +28,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 include(CompilerWarnings)
 include(Sanitizers)
+include(Hardening)
 include(Dependencies)
 
 set(
@@ -138,6 +140,7 @@ else()
     target_compile_definitions(lx_linux PUBLIC LX_HAS_SYSTEMD=0)
 endif()
 lx_enable_sanitizers(lx_linux)
+lx_enable_hardening(lx_linux)
 
 add_library(
     lx_application STATIC
@@ -157,6 +160,7 @@ add_library(
 add_library(lx::application ALIAS lx_application)
 target_link_libraries(lx_application PUBLIC lx::core PRIVATE lx_warnings)
 lx_enable_sanitizers(lx_application)
+lx_enable_hardening(lx_application)
 
 add_library(lx_cli STATIC src/cli/CliApp.cpp src/cli/JsonSerializer.cpp)
 add_library(lx::cli ALIAS lx_cli)
@@ -173,6 +177,7 @@ target_link_libraries(
     PRIVATE lx_warnings CLI11::CLI11 fmt::fmt nlohmann_json::nlohmann_json
 )
 lx_enable_sanitizers(lx_cli)
+lx_enable_hardening(lx_cli)
 
 if(LX_BUILD_TUI)
     add_library(lx_tui STATIC src/tui/FtxuiTuiRunner.cpp)
@@ -183,6 +188,7 @@ if(LX_BUILD_TUI)
         PRIVATE lx_warnings fmt::fmt ftxui::component ftxui::dom ftxui::screen
     )
     lx_enable_sanitizers(lx_tui)
+    lx_enable_hardening(lx_tui)
 endif()
 
 add_executable(lx src/main.cpp)
@@ -194,6 +200,7 @@ else()
     target_compile_definitions(lx PRIVATE LX_HAS_TUI=0)
 endif()
 lx_enable_sanitizers(lx)
+lx_enable_hardening(lx)
 
 install(
     TARGETS lx
@@ -266,6 +273,17 @@ if(LX_BUILD_TESTS)
             -DLX_EXPECTED_VERSION=${LX_DISPLAY_VERSION}
             -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/InstallLayoutTest.cmake"
     )
+    if(LX_ENABLE_HARDENING)
+        find_program(LX_READELF_EXECUTABLE readelf REQUIRED)
+        add_test(
+            NAME elf_hardening
+            COMMAND
+                "${CMAKE_COMMAND}"
+                -DLX_EXECUTABLE=$<TARGET_FILE:lx>
+                -DLX_READELF_COMMAND=${LX_READELF_EXECUTABLE}
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/ElfHardeningTest.cmake"
+        )
+    endif()
     find_program(LX_DPKG_DEB_EXECUTABLE dpkg-deb)
     if(CMAKE_BUILD_TYPE STREQUAL "Release" AND LX_BUILD_TUI AND
        "${LX_DISPLAY_VERSION}" STREQUAL "${LX_PACKAGE_VERSION}" AND

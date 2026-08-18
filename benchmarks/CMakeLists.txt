@@ -9,3 +9,4 @@ target_link_libraries(
         benchmark::benchmark
         benchmark::benchmark_main
 )
+lx_enable_hardening(lx_benchmarks)
