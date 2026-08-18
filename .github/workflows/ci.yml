@@ -42,7 +42,7 @@ jobs:
       CXX: ${{ matrix.cxx }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Install build tools
         run: sudo apt-get update && sudo apt-get install --yes ninja-build clang
@@ -57,15 +57,17 @@ jobs:
         run: ctest --preset ${{ matrix.preset }}
 
   deb-package:
-    name: Ubuntu DEB package
+    name: Ubuntu 22.04 DEB package and lifecycle
     runs-on: ubuntu-24.04
+    container: ubuntu:22.04
     steps:
-      - uses: actions/checkout@v4
-
       - name: Install build and packaging tools
         run: >-
-          sudo apt-get update && sudo apt-get install --yes
-          ninja-build pkg-config libsystemd-dev dpkg-dev groff zsh fish
+          apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install --yes
+          ca-certificates cmake g++ git ninja-build pkg-config libsystemd-dev
+          dpkg-dev groff zsh fish
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Configure package build
         run: cmake --preset package-release
@@ -79,9 +81,70 @@ jobs:
       - name: Create DEB
         run: cpack --config build/package-release/CPackConfig.cmake -G DEB
 
+      - name: Build synthetic old DEB
+        run: >-
+          cmake -S . -B build/package-old -G Ninja -DCMAKE_BUILD_TYPE=Release
+          -DLX_BUILD_TUI=ON -DLX_BUILD_TESTS=OFF -DLX_ENABLE_HARDENING=ON
+          -DLX_DISPLAY_VERSION=0.0.0 -DLX_PACKAGE_VERSION=0.0.0
+          && cmake --build build/package-old
+          && cpack --config build/package-old/CPackConfig.cmake -G DEB
+
+      - name: Test DEB upgrade and removal
+        run: >-
+          cmake
+          -DLX_PACKAGE_MANAGER=apt
+          -DLX_OLD_PACKAGE=${{ github.workspace }}/build/package-old/packages/lx-resource-manager_0.0.0_amd64.deb
+          -DLX_CURRENT_PACKAGE=${{ github.workspace }}/build/package-release/packages/lx-resource-manager_0.1.0_amd64.deb
+          -DLX_OLD_VERSION=0.0.0 -DLX_CURRENT_VERSION=0.1.0
+          -P cmake/PackageLifecycleTest.cmake
+
       - name: Upload DEB and checksum
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: lx-resource-manager-deb
+          path: build/package-release/packages/*
+          if-no-files-found: error
+  rpm-package:
+    name: Rocky Linux 8 RPM package and lifecycle
+    runs-on: ubuntu-24.04
+    container: rockylinux:8
+    steps:
+      - name: Install build and packaging tools
+        run: >-
+          dnf install --assumeyes ca-certificates cmake gcc-c++ git ninja-build
+          pkgconf-pkg-config systemd-devel rpm-build rpm
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Configure and build current RPM
+        run: cmake --preset package-release && cmake --build --preset package-release
+
+      - name: Test installed layout and RPM
+        run: ctest --preset package-release
+
+      - name: Create current RPM
+        run: cpack --config build/package-release/CPackConfig.cmake -G RPM
+
+      - name: Build synthetic old RPM
+        run: >-
+          cmake -S . -B build/package-old -G Ninja -DCMAKE_BUILD_TYPE=Release
+          -DLX_BUILD_TUI=ON -DLX_BUILD_TESTS=OFF -DLX_ENABLE_HARDENING=ON
+          -DLX_DISPLAY_VERSION=0.0.0 -DLX_PACKAGE_VERSION=0.0.0
+          && cmake --build build/package-old
+          && cpack --config build/package-old/CPackConfig.cmake -G RPM
+
+      - name: Test RPM upgrade and removal
+        run: >-
+          cmake
+          -DLX_PACKAGE_MANAGER=dnf
+          -DLX_OLD_PACKAGE=${{ github.workspace }}/build/package-old/packages/lx-resource-manager-0.0.0-1.x86_64.rpm
+          -DLX_CURRENT_PACKAGE=${{ github.workspace }}/build/package-release/packages/lx-resource-manager-0.1.0-1.x86_64.rpm
+          -DLX_OLD_VERSION=0.0.0 -DLX_CURRENT_VERSION=0.1.0
+          -P cmake/PackageLifecycleTest.cmake
+
+      - name: Upload RPM and checksum
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: lx-resource-manager-rpm
           path: build/package-release/packages/*
           if-no-files-found: error
