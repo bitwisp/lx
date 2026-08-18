@@ -277,6 +277,23 @@ if(LX_BUILD_TESTS)
         )
         set_tests_properties(deb_package PROPERTIES LABELS package)
     endif()
+    find_program(LX_RPM_EXECUTABLE rpm)
+    find_program(LX_RPMBUILD_EXECUTABLE rpmbuild)
+    if(CMAKE_BUILD_TYPE STREQUAL "Release" AND LX_BUILD_TUI AND
+       "${LX_DISPLAY_VERSION}" STREQUAL "${LX_PACKAGE_VERSION}" AND
+       LX_RPM_EXECUTABLE AND LX_RPMBUILD_EXECUTABLE)
+        add_test(
+            NAME rpm_package
+            COMMAND
+                "${CMAKE_COMMAND}"
+                -DLX_BINARY_DIR=${CMAKE_BINARY_DIR}
+                -DLX_CPACK_COMMAND=${CMAKE_CPACK_COMMAND}
+                -DLX_RPM_COMMAND=${LX_RPM_EXECUTABLE}
+                -DLX_EXPECTED_VERSION=${LX_PACKAGE_VERSION}
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/RpmPackageTest.cmake"
+        )
+        set_tests_properties(rpm_package PROPERTIES LABELS package)
+    endif()
 endif()
 
 set(CPACK_GENERATOR "DEB")
@@ -295,4 +312,9 @@ set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
 set(CPACK_DEBIAN_PACKAGE_SECTION "utils")
 set(CPACK_DEBIAN_PACKAGE_PRIORITY "optional")
 set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
+set(CPACK_RPM_FILE_NAME RPM-DEFAULT)
+set(CPACK_RPM_PACKAGE_LICENSE "Apache-2.0")
+set(CPACK_RPM_PACKAGE_GROUP "Applications/System")
+set(CPACK_RPM_PACKAGE_RELEASE 1)
+set(CPACK_RPM_PACKAGE_AUTOREQPROV ON)
 include(CPack)
