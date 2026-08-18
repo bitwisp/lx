@@ -81,6 +81,15 @@
         "LX_DISPLAY_VERSION": "0.1.0",
         "LX_PACKAGE_VERSION": "0.1.0"
       }
+    },
+    {
+      "name": "benchmark-release",
+      "displayName": "Release benchmarks",
+      "inherits": "release",
+      "cacheVariables": {
+        "LX_BUILD_BENCHMARKS": "ON",
+        "LX_BUILD_TESTS": "OFF"
+      }
     }
   ],
   "buildPresets": [
@@ -91,7 +100,8 @@
     { "name": "tui-debug", "configurePreset": "tui-debug" },
     { "name": "tui-release", "configurePreset": "tui-release" },
     { "name": "tsan", "configurePreset": "tsan" },
-    { "name": "package-release", "configurePreset": "package-release" }
+    { "name": "package-release", "configurePreset": "package-release" },
+    { "name": "benchmark-release", "configurePreset": "benchmark-release" }
   ],
   "testPresets": [
     {

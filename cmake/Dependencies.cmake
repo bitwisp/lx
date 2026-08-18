@@ -61,3 +61,16 @@ function(lx_add_test_dependencies)
     list(APPEND CMAKE_MODULE_PATH "${catch2_SOURCE_DIR}/extras")
     set(CMAKE_MODULE_PATH "${CMAKE_MODULE_PATH}" PARENT_SCOPE)
 endfunction()
+
+function(lx_add_benchmark_dependencies)
+    set(BENCHMARK_ENABLE_TESTING OFF CACHE BOOL "" FORCE)
+    set(BENCHMARK_ENABLE_INSTALL OFF CACHE BOOL "" FORCE)
+    set(BENCHMARK_ENABLE_GTEST_TESTS OFF CACHE BOOL "" FORCE)
+    FetchContent_Declare(
+        benchmark
+        GIT_REPOSITORY https://github.com/google/benchmark.git
+        GIT_TAG eddb0241389718a23a42db6af5f0164b6e0139af
+        GIT_SHALLOW TRUE
+    )
+    FetchContent_MakeAvailable(benchmark)
+endfunction()

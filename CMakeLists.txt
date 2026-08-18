@@ -241,6 +241,11 @@ if(LX_ENABLE_LTO)
     set_property(TARGET lx PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
 endif()
 
+if(LX_BUILD_BENCHMARKS)
+    lx_add_benchmark_dependencies()
+    add_subdirectory(benchmarks)
+endif()
+
 if(LX_BUILD_TESTS)
     include(CTest)
     enable_testing()
