@@ -60,7 +60,7 @@ It provides live Services, Ports, and Processes panels plus inspect, find,
 logs, and confirmed service/process actions. The normal presets remain free of
 the FTXUI dependency.
 
-## Install and DEB package
+## Install, DEB/RPM packages, and benchmarks
 
 Create the release package with TUI, LTO, the manual page, and Bash/Zsh/Fish
 completion:
@@ -70,11 +70,12 @@ cmake --preset package-release
 cmake --build --preset package-release
 ctest --preset package-release
 cpack --config build/package-release/CPackConfig.cmake -G DEB
+cpack --config build/package-release/CPackConfig.cmake -G RPM
 ```
 
-The package and SHA-256 checksum are written to
-`build/package-release/packages`. Install the generated package on Debian or
-Ubuntu with:
+The packages and SHA-256 checksums are written to
+`build/package-release/packages`. Install the generated DEB on Debian or Ubuntu
+with:
 
 ```bash
 sudo apt install ./build/package-release/packages/lx-resource-manager_0.1.0_*.deb
@@ -85,6 +86,16 @@ lx tui
 
 CPack derives runtime dependencies from the release binary; FTXUI is linked
 into LX and does not require a separate runtime package.
+
+Build and record the Phase 10B benchmark suite with:
+
+```bash
+cmake --preset benchmark-release
+cmake --build --preset benchmark-release
+build/benchmark-release/benchmarks/lx_benchmarks \
+  --benchmark_out=build/benchmark-release/phase10b-benchmarks.json \
+  --benchmark_out_format=json
+```
 
 ## Unified resources
 

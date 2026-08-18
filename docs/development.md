@@ -426,5 +426,54 @@ cmake --install build/package-release --prefix build/staging
 ./build/staging/bin/lx --version
 ```
 
-RPM, package upgrade tests, benchmarks, release security review, configuration
-files, and service reload/enable/disable remain Phase 10B work.
+## Phase 10B RPM and lifecycle testing
+
+The package build can also produce an RPM on Rocky, AlmaLinux,
+RHEL-compatible, or Fedora systems with `rpm-build` installed:
+
+```bash
+cmake --preset package-release
+cmake --build --preset package-release
+ctest --preset package-release
+cpack --config build/package-release/CPackConfig.cmake -G RPM
+```
+
+`deb_package` and `rpm_package` validate metadata, runtime dependencies,
+installed paths, and SHA-256 sidecars. CI additionally creates a synthetic
+`0.0.0` package and uses `PackageLifecycleTest.cmake` inside disposable
+containers to install it, upgrade to `0.1.0`, and remove it. A sentinel under
+`~/.config/lx` must survive both upgrade and removal; package-owned files must
+not survive removal.
+
+Official DEBs are built on Ubuntu 22.04 and RPMs on Rocky Linux 8 to retain the
+oldest supported glibc baseline. Pull requests also build and test on Ubuntu
+24.04, Debian 13, Rocky Linux 8, and AlmaLinux 9. A weekly matrix adds Ubuntu
+22.04/26.04, Debian 12, Rocky Linux 9, AlmaLinux 8, Fedora, and UBI 8/9 runtime
+checks. UBI checks validate RHEL userspace compatibility and are not a claim of
+RHEL certification. Phase 10B release artifacts are x86_64-only.
+
+## Performance benchmarks
+
+```bash
+cmake --preset benchmark-release
+cmake --build --preset benchmark-release
+build/benchmark-release/benchmarks/lx_benchmarks \
+  --benchmark_out=build/benchmark-release/phase10b-benchmarks.json \
+  --benchmark_out_format=json
+```
+
+The suite records socket listing, socket-inode resolution, process listing,
+and port inspection at representative 100 and 1,000 item scales. CI publishes
+the JSON result. Benchmark execution failures block CI, but Phase 10B does not
+use timing thresholds on shared runners.
+
+## Release hardening
+
+The `release`, `package-release`, and `benchmark-release` presets enable
+`LX_ENABLE_HARDENING`. Supported GCC/Clang builds use stack protection,
+`_FORTIFY_SOURCE=2`, PIE, full RELRO, immediate binding, and a non-executable
+stack. The `elf_hardening` CTest verifies mandatory ELF properties with
+`readelf`. See `docs/security.md` for the full release review checklist.
+
+Configuration files and service reload/enable/disable remain future work; no
+system configuration file or daemon unit is installed in Phase 10B.
